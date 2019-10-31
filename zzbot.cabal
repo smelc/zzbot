@@ -3,11 +3,9 @@ version:             0.1.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/githubuser/zzbot#readme
-license:             BSD3
+license:             Apache2
 license-file:        LICENSE
 author:              Author name here
-maintainer:          example@example.com
-copyright:           2019 Author name here
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
@@ -19,5 +17,16 @@ executable zzbot
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5,
                        containers,
+                       strings
+  other-modules:       Config
+
+test-suite spec
+  type:                exitcode-stdio-1.0
+  main-is:             TestConfig.hs
+  default-language:    Haskell2010
+  hs-source-dirs:      src, test
+  build-depends:       base >= 4.7 && < 5,
+                       containers,
+                       hspec,
                        strings
   other-modules:       Config

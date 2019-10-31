@@ -5,9 +5,15 @@ import Data.List
 import Text.Printf
 import qualified Data.Map.Strict as Map
 
+-- AST
 data Step =
       SetPropertyFromValue { prop :: String, value :: String }
-    | ShellCmd { cmd :: [String] }
+    | ShellCmd             { cmd :: [String] }
+data Builder = Builder { name :: String, steps :: [Step] }
+data Config = Config { builders :: [Builder], subst :: Subst }
+
+-- types
+type Subst = Map.Map String String
 
 class Substable a where
     substitute :: Subst -> a -> a
@@ -27,7 +33,6 @@ splitAround sep text =
           in case tailResult of
                 Nothing             -> Nothing
                 Just(before, after) -> Just(fst : before, after)
-
 
 -- splitDelimiters "(" ")" "foo(var)bar" returns Just("foo", "var", "bar")
 -- splitDelimiters "(" ")" "(var)bar" returns Just("", "var", "bar")
@@ -60,15 +65,9 @@ instance Substable Step where
     substitute subst (SetPropertyFromValue prop value) = SetPropertyFromValue prop (substituteString subst value)
     substitute subst whatever = whatever
 
-data Builder = Builder { name :: String, steps :: [Step] }
-
 instance Show Builder where
     show (Builder name steps) = 
         let shownSteps :: [String] = map show steps
             indentedSteps :: [String] = map (\x -> " " ++ x) shownSteps
             linedSteps :: String = intercalate "\n" indentedSteps
          in "<builder>\n" ++ linedSteps ++ "\n</builder>"
-
-type Subst = Map.Map String String
-
-data Config = Config { builders :: [Builder], subst :: Subst }
