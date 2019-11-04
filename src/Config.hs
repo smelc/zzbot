@@ -41,15 +41,10 @@ splitAround sep text =
 splitDelimiters :: String -> String -> String -> Maybe(String, String, String)
 -- This implementation is not very haskellish. I suppose we could use some Functor
 -- to simplify Nothing handling
-splitDelimiters open close text = 
-  let splitOpen = splitAround open text
-  in case splitOpen of
-        Nothing -> Nothing
-        Just(beforeOpen, afterOpen) ->
-            let splitClose = splitAround close afterOpen
-            in case splitClose of
-                Nothing -> Nothing
-                Just(beforeClose, afterClose) -> Just(beforeOpen, beforeClose, afterClose)
+splitDelimiters open close text = do
+  (beforeOpen, afterOpen) <- splitAround open text
+  (beforeClose, afterClose) <- splitAround close afterOpen
+  return (beforeOpen, beforeClose, afterClose)
 
 substituteString :: Subst -> String -> String
 substituteString subst s = s -- FIXME

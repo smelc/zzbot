@@ -16,3 +16,14 @@ main = hspec $ do
       splitAround "r" "foobar"  `shouldBe` Just ("fooba", "")
     it "splitAround nothing" $
       splitAround "c" "foobar"  `shouldBe` Nothing
+
+    it "splitDelimiters Nothing" $
+      splitDelimiters "(" ")" "foobar" `shouldBe` Nothing
+    it "splitDelimiters 1" $
+      splitDelimiters "(" ")" "foo(var)bar" `shouldBe` Just("foo", "var", "bar")
+    it "splitDelimiters 2" $
+      splitDelimiters "(" ")" "(var)bar" `shouldBe` Just("", "var", "bar")
+    it "splitDelimiters 3" $
+      splitDelimiters "(" ")" "foo(var)" `shouldBe` Just("foo", "var", "")
+    it "splitDelimiters 4" $
+      splitDelimiters "$(" ")" "foo$(var)" `shouldBe` Just("foo", "var", "")
