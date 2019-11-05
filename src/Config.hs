@@ -102,13 +102,7 @@ instance Substable Step where
                 else Right (ShellCmd images)
 
 instance Substable Builder where
-    -- can this be written in a more haskellish way ?
-    substitute subst (Builder name steps) = 
-        case substedName of
-            Left errMsg -> Left errMsg
-            Right nameImage ->
-                case substedSteps of
-                    Left errMsg -> Left errMsg
-                    Right stepsImage -> Right $ Builder nameImage stepsImage
-        where substedName :: Either String String = applySubstitution subst name
-              substedSteps :: Either String [Step] = substitute subst steps
+    substitute subst (Builder name steps) = do
+        substedName <- applySubstitution subst name
+        substedSteps <- substitute subst steps
+        Right $ Builder substedName substedSteps
