@@ -5,11 +5,14 @@ import qualified Data.Map.Strict as Map
 
 import Config
 
+showSubstErrors :: [String] -> String
+showSubstErrors lst = unlines lst
+
 main :: IO ()
 main = do
   putStrLn $ show shellCmd0
   putStrLn $ show builder
-  let substedBuilder :: Either String Builder = substitute subst builder
+  let substedBuilder :: Either [String] Builder = substitute ("$[", "]") subst builder
   putStrLn $ show substedBuilder
   where shellCmd0 :: Step = ShellCmd ["ls", "$[mydir]"]
         shellCmd1 = ShellCmd ["cd", "$[mydir]"]

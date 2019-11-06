@@ -3,6 +3,7 @@ module Config where
 
 import Data.Either
 import Data.List
+import Data.Maybe
 import Text.Printf
 import qualified Data.Map.Strict as Map
 
@@ -17,8 +18,8 @@ data Config = Config { builders :: [Builder], subst :: Subst }
 type Subst = Map.Map String String
 
 class Substable a where
-    -- The result of applying a substitution (Right) or an error message (Left)
-    substitute :: Subst -> a -> Either String a
+    -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
+    substitute :: (String, String) -> Subst -> a -> Either [String] a
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -41,8 +42,6 @@ splitAround sep text =
 -- splitDelimiters "(" ")" "foo(var)" returns Just("foo", "var")
 -- splitDelimiters "(" ")" "foobar" returns Nothing
 splitDelimiters :: String -> String -> String -> Maybe (String, String, String)
--- This implementation is not very haskellish. I suppose we could use some Functor
--- to simplify Nothing handling
 splitDelimiters open close text = do
   (beforeOpen, afterOpen) <- splitAround open text
   (beforeClose, afterClose) <- splitAround close afterOpen
@@ -61,16 +60,25 @@ parseVars delimiters text =
         Nothing -> if length(text) == 0 then [] else [Left text]
         Just (before, var, after) -> [Left before, Right var] ++ parseVars delimiters after
 
--- Replace $[key] by subst[key] for every $[key] found
--- Fail (return Left) if some key is not mapped by the substitution
-applySubstitution :: Subst -> String -> Either String String
-applySubstitution subst text =
-    case splitDelimiters "$[" "]" text of
-        Nothing -> Right text
-        Just (before, key, after) ->
-            case Map.lookup key subst of
-                Nothing -> Left ("$[" ++ key ++ "] appears in " ++ text ++ " but " ++ key ++ " is not bound by the substitution (" ++ show subst ++ ")")
-                Just image -> applySubstitution subst (before ++ image ++ after)
+-- delimiters -> substitution -> the text to substitute -> A list of errors
+validateVars :: (String, String) -> Subst -> String -> [String]
+validateVars delimiters subst text =
+    map (\key -> printf "key not mapped by substitution: %s. Substitution's domain is: %s" key domain) missingVars
+    where allVars = rights (parseVars delimiters text)
+          missingVars = filter (\key -> Map.notMember key subst) allVars
+          domain = intercalate " " (Map.keys subst)
+
+-- Replace variables enclosed in delimiters and return the resulting string (Right)
+-- or a list of errors (Left) if some keys are not mapped by the substitution
+applySubstitution :: (String, String) -> Subst -> String -> Either [String] String
+applySubstitution delimiters subst text =
+    if length(errors) > 0 then Left(errors) else
+    Right (intercalate "" $ catMaybes pieces')
+    where errors :: [String] = validateVars delimiters subst text
+          pieces :: [Either String VarName] = parseVars delimiters text
+          substApplier (Left text) = Just text
+          substApplier (Right varName) = Map.lookup varName subst
+          pieces' = map substApplier pieces
 
 attrValueString :: String -> String -> String
 attrValueString attr value = printf "%s=\"%s\"" attr value
@@ -80,8 +88,8 @@ attrValueString attr value = printf "%s=\"%s\"" attr value
 ----------------------------
 
 instance Show Step where
-    show (SetPropertyFromValue prop value)= printf "<set_property %s/>" (attrValueString prop value)
-    show (ShellCmd cmdList)= "<shell command=\"" ++ (unwords cmdList) ++ "\"/>"
+    show (SetPropertyFromValue prop value) = printf "<set_property %s/>" (attrValueString prop value)
+    show (ShellCmd cmdList) = "<shell command=\"" ++ (unwords cmdList) ++ "\"/>"
 
 instance Show Builder where
     show (Builder name steps) = 
@@ -94,28 +102,33 @@ instance Show Builder where
 -- Implementation of Substable --
 ---------------------------------
 
+-- Creates an instance overlapping with the one for lists, because hey
+-- String is [Char]!
+-- instance Substable String where
+--    substitute delimiters subst text = applySubstitution delimiters subst text
+
 -- Lift substitute to lists
 instance Substable a => Substable [a] where
-    substitute subst list = 
-        let base :: [Either String a] = map (substitute subst) list
-            (failures, images) = partitionEithers base in
+    substitute delimiters subst list = 
+        let base :: [Either [String] a] = map (substitute delimiters subst) list
+            (failures :: [[String]], images :: [a]) = partitionEithers base in
                 if length(failures) > 0
-                then Left(intercalate "\n" failures) -- report all errors at once, not only the first one
+                then Left $ concat failures
                 else Right images
 
 instance Substable Step where
-    substitute subst (SetPropertyFromValue prop value) = do
-        valueImage <- applySubstitution subst value
-        Right (SetPropertyFromValue prop valueImage)
-    substitute subst (ShellCmd cmdList) =
-        let cmdListImage :: [Either String String] = map (applySubstitution subst) cmdList
-            (failures, images) = partitionEithers cmdListImage in
-                if length(failures) > 0
-                then Left(intercalate "\n" failures)
-                else Right (ShellCmd images)
+    substitute delimiters subst (SetPropertyFromValue prop value) = do
+        valueImage <- applySubstitution delimiters subst value
+        return (SetPropertyFromValue prop valueImage)
+    substitute delimiters subst (ShellCmd (cmdList :: [String])) =
+        if length(failures) > 0
+        then Left $ concat failures
+        else Right $ ShellCmd images
+        where cmdListMapped :: [Either [String] String] = map (applySubstitution delimiters subst) cmdList
+              (failures :: [[String]], images) = partitionEithers cmdListMapped
 
 instance Substable Builder where
-    substitute subst (Builder name steps) = do
-        substedName <- applySubstitution subst name
-        substedSteps <- substitute subst steps
+    substitute delimiters subst (Builder name steps) = do
+        substedName <- applySubstitution delimiters subst name
+        substedSteps <- substitute delimiters subst steps
         return (Builder substedName substedSteps)
