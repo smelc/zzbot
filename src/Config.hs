@@ -105,4 +105,4 @@ instance Substable Builder where
     substitute subst (Builder name steps) = do
         substedName <- applySubstitution subst name
         substedSteps <- substitute subst steps
-        Right $ Builder substedName substedSteps
+        return (Builder substedName substedSteps)
