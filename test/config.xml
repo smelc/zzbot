@@ -1,0 +1,5 @@
+<config>
+  <builder name="ls builder">
+    <shell command="ls /"/>
+  </builder>
+</config>

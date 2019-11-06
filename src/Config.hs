@@ -48,6 +48,19 @@ splitDelimiters open close text = do
   (beforeClose, afterClose) <- splitAround close afterOpen
   return (beforeOpen, beforeClose, afterClose)
 
+type VarName = String
+
+-- First argument is the pair of opening and closing delimiters
+-- Second argument is the string to parse
+-- Returns the string parsed, concatening String content and variable names
+-- For example: parseVars ("(", ")") "foo(bar)chose" =
+--                [Left "foo", Right "bar", Left "chose"]
+parseVars :: (String, String) -> String -> [Either String VarName]
+parseVars delimiters text =
+    case splitDelimiters (fst delimiters) (snd delimiters) text of
+        Nothing -> if length(text) == 0 then [] else [Left text]
+        Just (before, var, after) -> [Left before, Right var] ++ parseVars delimiters after
+
 -- Replace $[key] by subst[key] for every $[key] found
 -- Fail (return Left) if some key is not mapped by the substitution
 applySubstitution :: Subst -> String -> Either String String
