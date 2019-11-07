@@ -30,15 +30,15 @@ testSplitDelimiters :: SpecWith ()
 testSplitDelimiters =
   describe "splitDelimiters" $ do
     it "Nothing" $
-      splitDelimiters "(" ")" "foobar" `shouldBe` Nothing
+      splitDelimiters ("(", ")") "foobar" `shouldBe` Nothing
     it "middle" $
-      splitDelimiters "(" ")" "foo(var)bar" `shouldBe` Just("foo", "var", "bar")
+      splitDelimiters ("(", ")") "foo(var)bar" `shouldBe` Just("foo", "var", "bar")
     it "start" $
-      splitDelimiters "(" ")" "(var)bar" `shouldBe` Just("", "var", "bar")
+      splitDelimiters ("(", ")") "(var)bar" `shouldBe` Just("", "var", "bar")
     it "end" $
-      splitDelimiters "(" ")" "foo(var)" `shouldBe` Just("foo", "var", "")
+      splitDelimiters ("(", ")") "foo(var)" `shouldBe` Just("foo", "var", "")
     it "middle2" $
-      splitDelimiters "$(" ")" "foo$(var)" `shouldBe` Just("foo", "var", "")
+      splitDelimiters ("$(", ")") "foo$(var)" `shouldBe` Just("foo", "var", "")
 
 main :: IO ()
 main = hspec $ do
