@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/smelc/zzbot.svg?branch=master)](https://travis-ci.com/smelc/zzbot)
+
 # zzbot
 
 Useful commands for now:
