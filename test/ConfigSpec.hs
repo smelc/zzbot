@@ -8,11 +8,11 @@ import Config
 testParseVars = 
   describe "parseVars" $ do
     it "1" $
-      parseVars ("$(", ")") "foo$(b)ar"  `shouldBe` [Left("foo"), Right("b"), Left("ar")]
+      parseVars ("$(", ")") "foo$(b)ar"  `shouldBe` [Left "foo", Right "b", Left "ar"]
     it "no var" $
-      parseVars ("$(", ")") "foobar"  `shouldBe` [Left("foobar")]
+      parseVars ("$(", ")") "foobar"  `shouldBe` [Left "foobar"]
     it "2" $
-      parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left("foo"), Right("b"), Left("a"), Right("r")]
+      parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left "foo", Right "b", Left "a", Right "r"]
 
 testSplitAround :: SpecWith ()
 testSplitAround = 
