@@ -36,3 +36,5 @@ install:
 script:
 # Build the package, its tests and run the tests
 - stack --no-terminal test
+# run hlint
+- curl -sSL https://raw.github.com/ndmitchell/neil/master/misc/travis.sh | sh -s -- hlint .
