@@ -5,7 +5,7 @@ module Main where
 import Data.List
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import Test.QuickCheck ((===))
+import Test.QuickCheck
 import Test.QuickCheck.Modifiers
 
 import Config hiding (prop)
@@ -18,16 +18,16 @@ testParseVars =
       parseVars ("$(", ")") "foobar"  `shouldBe` [Left "foobar"]
     it "2" $
       parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left "foo", Right "b", Left "a", Right "r"]
-    prop "parse . pretty = id" $
-      \(NonEmpty open) (NonEmpty close) (unpackNonEmpty->chunks) ->
-        parseVars (open, close) (pretty open close chunks) === chunks
+    prop "pretty . parse = id" $
+      \(NonEmpty open) (NonEmpty close) ->
+        forAll (generateStr open close) $ \str ->
+          pretty open close (parseVars (open, close) str) === str
  where
   pretty open close = concatMap (prettyChunk open close)
   prettyChunk open close (Left str) = str
   prettyChunk open close (Right str) = open ++ str ++ close
-  unpackNonEmpty = map unpackNonEmptyChunk
-  unpackNonEmptyChunk (Left (NonEmpty str)) = Left str
-  unpackNonEmptyChunk (Right (NonEmpty str)) = Right str
+  generateStr open close = concat <$> listOf (generateChunk open close)
+  generateChunk open close = oneof [arbitrary, elements [open, close]]
 
 testSplitAround :: SpecWith ()
 testSplitAround =
