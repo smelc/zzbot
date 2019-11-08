@@ -1,5 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
-
 module Main where
 
 import Data.List
@@ -18,16 +16,16 @@ testParseVars =
       parseVars ("$(", ")") "foobar"  `shouldBe` [Left "foobar"]
     it "2" $
       parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left "foo", Right "b", Left "a", Right "r"]
-    prop "pretty . parse = id" $
-      \(NonEmpty open) (NonEmpty close) ->
-        forAll (generateStr open close) $ \str ->
-          pretty open close (parseVars (open, close) str) === str
+    modifyMaxSuccess (const 10000) $
+      prop "parse . pretty . parse . pretty = id" $
+        \(NonEmpty open) (NonEmpty close) chunks ->
+            let toAst = pretty open close
+                toStr = parseVars (open, close)
+            in (toAst . toStr . toAst . toStr) chunks === chunks
  where
   pretty open close = concatMap (prettyChunk open close)
   prettyChunk open close (Left str) = str
   prettyChunk open close (Right str) = open ++ str ++ close
-  generateStr open close = concat <$> listOf (generateChunk open close)
-  generateChunk open close = oneof [arbitrary, elements [open, close]]
 
 testSplitAround :: SpecWith ()
 testSplitAround =
