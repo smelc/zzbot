@@ -1,11 +1,16 @@
+{-# LANGUAGE ViewPatterns #-}
+
 module Main where
 
 import Data.List
 import Test.Hspec
+import Test.Hspec.QuickCheck
+import Test.QuickCheck ((===))
+import Test.QuickCheck.Modifiers
 
-import Config
+import Config hiding (prop)
 
-testParseVars = 
+testParseVars =
   describe "parseVars" $ do
     it "1" $
       parseVars ("$(", ")") "foo$(b)ar"  `shouldBe` [Left "foo", Right "b", Left "ar"]
@@ -13,9 +18,19 @@ testParseVars =
       parseVars ("$(", ")") "foobar"  `shouldBe` [Left "foobar"]
     it "2" $
       parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left "foo", Right "b", Left "a", Right "r"]
+    prop "parse . pretty = id" $
+      \(NonEmpty open) (NonEmpty close) (unpackNonEmpty->chunks) ->
+        parseVars (open, close) (pretty open close chunks) === chunks
+ where
+  pretty open close = concatMap (prettyChunk open close)
+  prettyChunk open close (Left str) = str
+  prettyChunk open close (Right str) = open ++ str ++ close
+  unpackNonEmpty = map unpackNonEmptyChunk
+  unpackNonEmptyChunk (Left (NonEmpty str)) = Left str
+  unpackNonEmptyChunk (Right (NonEmpty str)) = Right str
 
 testSplitAround :: SpecWith ()
-testSplitAround = 
+testSplitAround =
   describe "splitAround" $ do
     it "prefix" $
       splitAround "f" "foobar"  `shouldBe` Just ("", "oobar")
