@@ -16,12 +16,12 @@ testParseVars =
       parseVars ("$(", ")") "foobar"  `shouldBe` [Left "foobar"]
     it "2" $
       parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left "foo", Right "b", Left "a", Right "r"]
-    modifyMaxSuccess (const 10000) $
-      prop "parse . pretty . parse . pretty = id" $
+    modifyMaxSuccess (const 1000) $
+      prop "pretty . parse . pretty = pretty" $
         \(NonEmpty open) (NonEmpty close) chunks ->
-            let toAst = pretty open close
-                toStr = parseVars (open, close)
-            in (toAst . toStr . toAst . toStr) chunks === chunks
+            let toStr = pretty open close
+                toAst = parseVars (open, close)
+            in (toStr. toAst . toStr) chunks === toStr chunks
  where
   pretty open close = concatMap (prettyChunk open close)
   prettyChunk open close (Left str) = str
