@@ -25,12 +25,16 @@ runStep ctxt step =
         SetPropertyFromValue prop value -> Left $ Map.insert prop value ctxt
         ShellCmd cmd -> Right $ runShellCommand cmd
 
-runSteps :: BuildContext -> [Step] -> ExitCode
-runSteps ctxt [] = ExitSuccess
+runSteps :: BuildContext -> [Step] -> IO(ExitCode)
+runSteps ctxt [] = return ExitSuccess
 runSteps ctxt (step : tl) =
     case runStep ctxt step of
         Left ctxt' -> runSteps ctxt' tl 
-        Right io -> undefined
+        Right io -> do
+            (rc, stdin, stdout) <- io
+            case rc of
+                ExitSuccess -> runSteps ctxt tl -- step succeeded, continue execution
+                otherwise -> return rc           -- step failed; stop execution
 
-runBuild :: Builder -> ExitCode
+runBuild :: Builder -> IO(ExitCode)
 runBuild (Builder _ steps) = runSteps Map.empty steps
