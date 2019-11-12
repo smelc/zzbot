@@ -8,9 +8,10 @@ import Data.List
 import Data.Maybe
 import Text.Printf
 import Text.XML
+
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
-import qualified Data.Map.Strict as Map
 
 -- AST
 data Step =
