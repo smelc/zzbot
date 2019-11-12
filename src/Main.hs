@@ -1,19 +1,21 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
+import Config
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.IO as LT
 import qualified Data.Map.Strict as Map
 
-import Config
 
 showSubstErrors :: [String] -> String
 showSubstErrors = unlines
 
 main :: IO ()
 main = do
-  print shellCmd0
-  print builder
+  LT.putStrLn (renderAsXml shellCmd0)
+  LT.putStrLn (renderAsXml builder)
   let substedBuilder :: Either [String] Builder = substitute ("$[", "]") subst builder
-  print substedBuilder
+  LT.putStrLn (either (LT.pack . unlines) renderAsXml substedBuilder)
   where shellCmd0 :: Step = ShellCmd ["ls", "$[mydir]"]
         shellCmd1 = ShellCmd ["cd", "$[mydir]"]
         builder :: Builder = Builder "bname" [shellCmd0, shellCmd1]

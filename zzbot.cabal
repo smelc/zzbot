@@ -18,6 +18,8 @@ executable zzbot
   ghc-options:         -Wincomplete-patterns
   build-depends:       base >= 4.7 && < 5,
                        containers,
+                       xml-conduit,
+                       text,
 -- Until https://github.com/haskell/haskell-ide-engine/issues/1362 is sorted, we need tests dependencies in main dependencies:
                        hspec,
                        QuickCheck
@@ -30,6 +32,8 @@ test-suite spec
   hs-source-dirs:      src, test
   build-depends:       base >= 4.7 && < 5,
                        containers,
+                       xml-conduit,
+                       text,
                        hspec,
                        QuickCheck
   other-modules:       Config
