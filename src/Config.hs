@@ -1,10 +1,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Config where
 
 import Data.Either
 import Data.List
 import Data.Maybe
 import Text.Printf
+import Text.XML
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
 import qualified Data.Map.Strict as Map
 
 -- AST
@@ -80,23 +85,31 @@ applySubstitution delimiters subst text =
           substApplier (Right varName) = Map.lookup varName subst
           pieces' = map substApplier pieces
 
-attrValueString :: String -> String -> String
-attrValueString = printf "%s=\"%s\""
+---------
+-- XML --
+---------
 
-----------------------------
--- Implementation of Show --
-----------------------------
+class ToXml a where
+    toXml :: a -> Element
 
-instance Show Step where
-    show (SetPropertyFromValue prop value) = printf "<set_property %s/>" (attrValueString prop value)
-    show (ShellCmd cmdList) = "<shell command=\"" ++ unwords cmdList ++ "\"/>"
+simpleName :: String -> Name
+simpleName name = Name (T.pack name) Nothing Nothing
 
-instance Show Builder where
-    show (Builder name steps) = 
-        let shownSteps :: [String] = map show steps
-            indentedSteps :: [String] = map (" " ++) shownSteps
-            linedSteps :: String = intercalate "\n" indentedSteps
-         in "<builder>\n" ++ linedSteps ++ "\n</builder>"
+(=:) :: String -> String -> Map.Map Name T.Text
+attr =: value = Map.singleton (simpleName attr) (T.pack value)
+
+instance ToXml Step where
+    toXml (SetPropertyFromValue prop value) = Element "set_property" (prop =: value) []
+    toXml (ShellCmd cmdList) = Element "shell" ("command" =: unwords cmdList) []
+
+instance ToXml Builder where
+    toXml (Builder name steps) = Element "builder" Map.empty (map (NodeElement . toXml) steps)
+
+renderAsXml :: ToXml a => a -> LT.Text
+renderAsXml x = renderText settings doc
+ where
+  settings = def {rsPretty=True, rsXMLDeclaration=False}
+  doc = Document (Prologue [] Nothing []) (toXml x) []
 
 ---------------------------------
 -- Implementation of Substable --
@@ -109,7 +122,7 @@ instance Show Builder where
 
 -- Lift substitute to lists
 instance Substable a => Substable [a] where
-    substitute delimiters subst list = 
+    substitute delimiters subst list =
         let base :: [Either [String] a] = map (substitute delimiters subst) list
             (failures :: [[String]], images :: [a]) = partitionEithers base in
                 if not (null failures)
