@@ -4,6 +4,7 @@
 module Exec where
 
 import Control.Monad
+import System.Console.ANSI
 import System.Exit
 import System.IO
 import System.Process
@@ -16,10 +17,16 @@ import qualified GHC.IO.Handle as Handle
 -- Maps build variables to their values
 type BuildContext = Map.Map String String
 
+zzLog :: String -> IO()
+zzLog = \s -> do
+  putStrLn $ "ZZ> " ++ s
+
 -- return code, stdout, stderr
 runShellCommand :: [String] -> IO (ExitCode, String, String)
 runShellCommand cmd = do
-    print $ "Starting: " ++ unwords cmd
+    setSGR [SetColor Foreground Vivid Green]
+    zzLog $ unwords cmd
+    setSGR []
     readProcessWithExitCode "/bin/sh" ("-c" : cmd) ""
 
 runSteps :: BuildContext -> [Step] -> IO ExitCode
@@ -28,11 +35,15 @@ runSteps ctxt (SetPropertyFromValue prop value : steps) =
   runSteps (Map.insert prop value ctxt) steps
 runSteps ctxt (ShellCmd cmd : steps) = do
   (rc, outmsg :: String, errmsg) <- runShellCommand cmd
-  unless (null outmsg) $ putStrLn outmsg -- show step normal output, if any
+  unless (null outmsg) $ putStr outmsg -- show step normal output, if any
   unless (null errmsg) $ hPutStrLn stderr errmsg -- show step error output, if any
   case rc of
     ExitSuccess -> runSteps ctxt steps -- step succeeded, continue execution
-    _           -> return rc           -- step failed; stop execution
+    _           -> do                  -- step failed, stop execution
+      setSGR [SetColor Foreground Vivid Red]
+      zzLog $ unwords cmd ++ " failed: " ++ show(rc)
+      setSGR []
+      return rc
 
 runBuild :: Builder -> IO ExitCode
 runBuild (Builder _ steps) = runSteps Map.empty steps

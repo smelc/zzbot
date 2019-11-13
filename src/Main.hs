@@ -25,5 +25,6 @@ main = do
   putStrLn $ "Builder finished with " ++ show rc
   where shellCmd0 :: Step = ShellCmd ["ls", "$[mydir]"]
         shellCmd1 = ShellCmd ["tree", "-L", "1", "$[mydir]"]
-        builder :: Builder = Builder "bname" [shellCmd0, shellCmd1]
+        shellCmd2 = ShellCmd ["wrongcmd"]
+        builder :: Builder = Builder "bname" [shellCmd0, shellCmd1, shellCmd2]
         subst :: Subst = Map.fromList [("mydir", "/")]
