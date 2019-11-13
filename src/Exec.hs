@@ -16,34 +16,21 @@ import qualified GHC.IO.Handle as Handle
 -- Maps build variables to their values
 type BuildContext = Map.Map String String
 
-createStepProcess :: [String] -> IO (Maybe Handle.Handle, Maybe Handle.Handle, Maybe Handle.Handle, ProcessHandle)
-createStepProcess cmd = do
-    print $ "Starting: " ++ cmdString
-    createProcess (shell cmdString){ std_out = CreatePipe }
-    where cmdString = unwords cmd
-
 -- return code, stdout, stderr
 runShellCommand :: [String] -> IO (ExitCode, String, String)
 runShellCommand cmd = readProcessWithExitCode "/bin/sh" ("-c" : cmd) ""
 
-runStep :: BuildContext -> Step -> Either BuildContext (IO (ExitCode, String, String)) 
-runStep ctxt step = 
-    case step of
-        SetPropertyFromValue prop value -> Left $ Map.insert prop value ctxt
-        ShellCmd cmd -> Right $ runShellCommand cmd
-
 runSteps :: BuildContext -> [Step] -> IO ExitCode
 runSteps ctxt [] = return ExitSuccess
-runSteps ctxt (step : tl) =
-    case runStep ctxt step of
-        Left ctxt' -> runSteps ctxt' tl 
-        Right io -> do
-            (rc, outmsg:: String, errmsg) <- io
-            unless (null outmsg) $ print outmsg -- show step normal output, if any
-            unless (null errmsg) $ hPutStrLn stderr errmsg -- show step error output, if any
-            case rc of
-                ExitSuccess -> runSteps ctxt tl -- step succeeded, continue execution
-                _           -> return rc        -- step failed; stop execution
+runSteps ctxt (SetPropertyFromValue prop value : steps) =
+  runSteps (Map.insert prop value ctxt) steps
+runSteps ctxt (ShellCmd cmd : steps) = do
+  (rc, outmsg :: String, errmsg) <- runShellCommand cmd
+  unless (null outmsg) $ putStrLn outmsg -- show step normal output, if any
+  unless (null errmsg) $ hPutStrLn stderr errmsg -- show step error output, if any
+  case rc of
+    ExitSuccess -> runSteps ctxt steps -- step succeeded, continue execution
+    _           -> return rc           -- step failed; stop execution
 
 runBuild :: Builder -> IO ExitCode
 runBuild (Builder _ steps) = runSteps Map.empty steps
