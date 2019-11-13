@@ -18,7 +18,9 @@ type BuildContext = Map.Map String String
 
 -- return code, stdout, stderr
 runShellCommand :: [String] -> IO (ExitCode, String, String)
-runShellCommand cmd = readProcessWithExitCode "/bin/sh" ("-c" : cmd) ""
+runShellCommand cmd = do
+    print $ "Starting: " ++ unwords cmd
+    readProcessWithExitCode "/bin/sh" ("-c" : cmd) ""
 
 runSteps :: BuildContext -> [Step] -> IO ExitCode
 runSteps ctxt [] = return ExitSuccess
