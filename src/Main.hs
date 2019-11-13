@@ -22,7 +22,7 @@ main = do
   let substedBuilder :: Either [String] Builder = substitute ("$[", "]") subst builder
   LT.putStrLn (either (LT.pack . unlines) renderAsXml substedBuilder)
   rc :: ExitCode <- runSubstedBuild substedBuilder
-  print $ "Builder finished with " ++ show rc
+  putStrLn $ "Builder finished with " ++ show rc
   where shellCmd0 :: Step = ShellCmd ["ls", "$[mydir]"]
         shellCmd1 = ShellCmd ["tree", "-L", "1", "$[mydir]"]
         builder :: Builder = Builder "bname" [shellCmd0, shellCmd1]
