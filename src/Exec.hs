@@ -1,7 +1,11 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 -- File to exec a build specified as a Builder
 module Exec where
 
+import Control.Monad
 import System.Exit
+import System.IO
 import System.Process
 
 import Config
@@ -13,11 +17,14 @@ import qualified GHC.IO.Handle as Handle
 type BuildContext = Map.Map String String
 
 createStepProcess :: [String] -> IO (Maybe Handle.Handle, Maybe Handle.Handle, Maybe Handle.Handle, ProcessHandle)
-createStepProcess cmd = createProcess (shell $ unwords cmd){ std_out = CreatePipe }
+createStepProcess cmd = do
+    print $ "Starting: " ++ cmdString
+    createProcess (shell cmdString){ std_out = CreatePipe }
+    where cmdString = unwords cmd
 
 -- return code, stdout, stderr
 runShellCommand :: [String] -> IO (ExitCode, String, String)
-runShellCommand cmd = readProcessWithExitCode "/bin/sh" cmd ""
+runShellCommand cmd = readProcessWithExitCode "/bin/sh" ("-c" : cmd) ""
 
 runStep :: BuildContext -> Step -> Either BuildContext (IO (ExitCode, String, String)) 
 runStep ctxt step = 
@@ -31,7 +38,9 @@ runSteps ctxt (step : tl) =
     case runStep ctxt step of
         Left ctxt' -> runSteps ctxt' tl 
         Right io -> do
-            (rc, stdin, stdout) <- io
+            (rc, outmsg:: String, errmsg) <- io
+            unless (null outmsg) $ print outmsg -- show step normal output, if any
+            unless (null errmsg) $ hPutStrLn stderr errmsg -- show step error output, if any
             case rc of
                 ExitSuccess -> runSteps ctxt tl -- step succeeded, continue execution
                 _           -> return rc        -- step failed; stop execution
