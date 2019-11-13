@@ -18,8 +18,7 @@ import qualified GHC.IO.Handle as Handle
 type BuildContext = Map.Map String String
 
 zzLog :: String -> IO()
-zzLog = \s -> do
-  putStrLn $ "ZZ> " ++ s
+zzLog log = putStrLn $ "ZZ> " ++ log
 
 -- return code, stdout, stderr
 runShellCommand :: [String] -> IO (ExitCode, String, String)
@@ -41,7 +40,7 @@ runSteps ctxt (ShellCmd cmd : steps) = do
     ExitSuccess -> runSteps ctxt steps -- step succeeded, continue execution
     _           -> do                  -- step failed, stop execution
       setSGR [SetColor Foreground Vivid Red]
-      zzLog $ unwords cmd ++ " failed: " ++ show(rc)
+      zzLog $ unwords cmd ++ " failed: " ++ show rc
       setSGR []
       return rc
 
