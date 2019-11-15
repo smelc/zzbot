@@ -1,4 +1,4 @@
-module Main where
+module ConfigSpec (spec) where
 
 import Data.List
 import Test.Hspec
@@ -53,8 +53,7 @@ testSplitDelimiters =
     it "middle2" $
       splitDelimiters ("$(", ")") "foo$(var)" `shouldBe` Just("foo", "var", "")
 
-main :: IO ()
-main = hspec $ do
+spec = do
   testParseVars
   testSplitAround
   testSplitDelimiters
