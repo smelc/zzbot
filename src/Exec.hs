@@ -35,7 +35,7 @@ instance MonadExec IO where
   runShellCommand cmd =
     readProcessWithExitCode "/bin/sh" ("-c" : cmd) ""
 
-  putOutLn = hPutStrLn stdout
+  putOutLn = putStrLn
 
   putErrLn = hPutStrLn stderr
 
