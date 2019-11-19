@@ -32,9 +32,12 @@ before_install:
 install:
 # Build dependencies
 - stack --no-terminal --install-ghc test --only-dependencies
+- stack haddock
 
 script:
 # Build the package, its tests and run the tests
 - stack --no-terminal test
 # run hlint
 - curl -sSL https://raw.github.com/ndmitchell/neil/master/misc/travis.sh | sh -s -- hlint .
+# Generate documentation from sources
+- stack exec haddock -- --html $(find src -name \*.hs) -o html

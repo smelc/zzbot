@@ -1,3 +1,8 @@
+html/
+
+# stack
 .stack-work
-*.swp
 stack.yaml.lock
+
+# vim
+*.swp

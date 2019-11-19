@@ -55,19 +55,19 @@ splitDelimiters delimiters text = do
 
 type VarName = String
 
--- First argument is the pair of opening and closing delimiters
--- Second argument is the string to parse
--- Returns the string parsed, concatening String content and variable names
--- For example: parseVars ("(", ")") "foo(bar)chose" =
---                [Left "foo", Right "bar", Left "chose"]
-parseVars :: (String, String) -> String -> [Either String VarName]
+-- | > parseVars ("(", ")") "foo(bar)chose" = [Left "foo", Right "bar", Left "chose"]
+parseVars :: (String, String) -- ^ The pair of opening and closing delimiters
+          -> String           -- ^ The string to parse
+          -> [Either String VarName] -- ^ The parsed string, concatenating String content and variable names
 parseVars delimiters text =
     case splitDelimiters delimiters text of
         Nothing -> [Left text | not (null text)]
         Just (before, var, after) -> [Left before, Right var] ++ parseVars delimiters after
 
--- delimiters -> substitution -> the text to substitute -> A list of errors
-validateVars :: (String, String) -> Subst -> String -> [String]
+validateVars :: (String, String) -- ^ The pair of opening and closing delimiters
+             -> Subst            -- ^ The substitution
+             -> String           -- ^ The text to substitute
+             -> [String]         -- ^ A list of errors
 validateVars delimiters subst text =
     map (\key -> printf "key not mapped by substitution: %s. Substitution's domain is: %s" key domain) missingVars
     where allVars = rights (parseVars delimiters text)
