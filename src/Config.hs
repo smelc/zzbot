@@ -121,25 +121,23 @@ renderAsXml x = renderText settings doc
 -- instance Substable String where
 --    substitute delimiters subst text = applySubstitution delimiters subst text
 
+mapEither :: Monoid b => (a -> Either b c) -> [a] -> Either b [c]
+mapEither f xs =
+    let (errors, results) = partitionEithers (map f xs)
+    in if not (null errors)
+        then Left (mconcat errors)
+        else Right results
+
 -- Lift substitute to lists
 instance Substable a => Substable [a] where
-    substitute delimiters subst list =
-        let base :: [Either [String] a] = map (substitute delimiters subst) list
-            (failures :: [[String]], images :: [a]) = partitionEithers base in
-                if not (null failures)
-                then Left $ concat failures
-                else Right images
+    substitute delimiters subst = mapEither (substitute delimiters subst)
 
 instance Substable Step where
     substitute delimiters subst (SetPropertyFromValue prop value) = do
         valueImage <- applySubstitution delimiters subst value
         return (SetPropertyFromValue prop valueImage)
-    substitute delimiters subst (ShellCmd (cmdList :: [String])) =
-        if not (null failures)
-        then Left $ concat failures
-        else Right $ ShellCmd images
-        where cmdListMapped :: [Either [String] String] = map (applySubstitution delimiters subst) cmdList
-              (failures :: [[String]], images) = partitionEithers cmdListMapped
+    substitute delimiters subst (ShellCmd cmds) =
+        ShellCmd <$> mapEither (applySubstitution delimiters subst) cmds
 
 instance Substable Builder where
     substitute delimiters subst (Builder name steps) = do
