@@ -1,5 +1,6 @@
 <config>
   <builder name="ls builder">
     <shell command="ls /"/>
+    <setProperty property="prop" value="foobar"/>
   </builder>
 </config>

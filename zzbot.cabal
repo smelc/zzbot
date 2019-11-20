@@ -22,6 +22,7 @@ executable zzbot
                        prettyprinter-ansi-terminal,
                        process,
                        text,
+                       xml,
                        xml-conduit,
 -- Until https://github.com/haskell/haskell-ide-engine/issues/1362 is sorted, we need tests dependencies in main dependencies:
                        hspec,
@@ -29,6 +30,7 @@ executable zzbot
                        QuickCheck
   other-modules:       Config
                        , Exec
+                       , XmlParse
 
 test-suite spec
   type:                exitcode-stdio-1.0
