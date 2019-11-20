@@ -23,7 +23,7 @@ giveLineInMsg :: String -> Maybe Line -> String
 giveLineInMsg errMsg Nothing = errMsg
 giveLineInMsg errMsg (Just line) = "At line " ++ show line ++ ": " ++ errMsg
 
-data ZXML = ZElem {tag :: String, attrs :: [(String, String)], maybeLine :: Maybe Line}
+data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML], maybeLine :: Maybe Line}
 
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
@@ -33,30 +33,39 @@ getAttrValue elem attr attrs =
     maybeToLeft errMsg $ lookup attr attrs
     where errMsg = "Missing attribute in element " ++ elem ++ ": " ++ attr
 
-zXMLToBuilder :: ZXML -> Either String Builder
+zXMLToStep :: ZXML -> Either String Step
+zXMLToStep zxml = undefined
+
+zXMLToBuilder :: ZXML -> Either [String] Builder
 zXMLToBuilder zxml = do
-    name <- getAttrValue elem "name" zattrs
-    undefined
+    name <- mapLeft pure $ getAttrValue elem "name" zattrs
+    if not $ null errs
+    then Left errs
+    else return $ Builder name steps
     where elem = "builder"
           zattrs = attrs zxml
+          (errs, steps) = partitionEithers $ map zXMLToStep (children zxml)
 
-textXMLToZXML :: Content -> Either String ZXML
-textXMLToZXML (Text CData {cdLine}) = Left $ giveLineInMsg "Unexpected Text in XML" cdLine
-textXMLToZXML (CRef _)              = Left "Unexpected CRef in XML"
-textXMLToZXML (Elem Element {elName, elAttribs, elLine}) =
-    return $ ZElem tag attrs elLine
+textXMLToZXML :: Content -> Either [String] ZXML
+textXMLToZXML (Text CData {cdLine}) = Left [giveLineInMsg "Unexpected Text in XML" cdLine]
+textXMLToZXML (CRef _)              = Left ["Unexpected CRef in XML"]
+textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) =
+    if not $ null errs
+    then Left $ concat errs
+    else Right $ ZElem tag attrs children elLine
     where tag :: String = qName elName
           attrs = map (\elAttr -> (qName $ attrKey elAttr, attrVal elAttr)) elAttribs
+          (errs, children) = partitionEithers $ map textXMLToZXML elContent
 
-parseXmlString :: String                  -- ^ The XML Content
-               -> Either String [Builder] -- ^ Either an error message, or the builders decoded from XML
+parseXmlString :: String                    -- ^ The XML Content
+               -> Either [String] [Builder] -- ^ Either an error message, or the builders decoded from XML
 parseXmlString xml =
     undefined
     where contents :: [Content] = XmlInput.parseXML xml
           zxmls = map textXMLToZXML contents
 
-parseXmlFile :: String                       -- ^ A filename
-             -> IO (Either String [Builder]) -- ^ The builders
+parseXmlFile :: String                         -- ^ A filename
+             -> IO (Either [String] [Builder]) -- ^ The builders
 parseXmlFile filepath = do
     handle :: Handle <- openFile filepath ReadMode  
     contents :: String <- hGetContents handle 
