@@ -4,6 +4,7 @@
 module XmlParse where
 
 import Data.Either
+import Data.Either.Combinators
 import Data.List
 import Data.Maybe
 import System.IO
@@ -29,9 +30,8 @@ getAttrValue :: String -- ^ The element in which the attribute is being searched
              -> [(String, String)] -- ^ The actual list of attributes, with the value
              -> Either String String -- ^ An error message or the attribute's value
 getAttrValue elem attr attrs =
-    case lookup attr attrs of
-        Nothing    -> Left ("Missing attribute in element " ++ elem ++ ": " ++ attr)
-        Just value -> Right value
+    maybeToLeft errMsg $ lookup attr attrs
+    where errMsg = "Missing attribute in element " ++ elem ++ ": " ++ attr
 
 zXMLToBuilder :: ZXML -> Either String Builder
 zXMLToBuilder zxml = do

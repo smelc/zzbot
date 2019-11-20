@@ -18,6 +18,7 @@ executable zzbot
   ghc-options:         -Wincomplete-patterns
   build-depends:       base >= 4.7 && < 5,
                        containers,
+                       either,
                        prettyprinter,
                        prettyprinter-ansi-terminal,
                        process,
@@ -39,6 +40,7 @@ test-suite spec
   hs-source-dirs:      src, test
   build-depends:       base >= 4.7 && < 5,
                        containers,
+                       either,
                        prettyprinter,
                        prettyprinter-ansi-terminal,
                        process,
