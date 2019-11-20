@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module XmlParse where
 
@@ -28,10 +29,9 @@ getAttrValue :: String -- ^ The element in which the attribute is being searched
              -> [(String, String)] -- ^ The actual list of attributes, with the value
              -> Either String String -- ^ An error message or the attribute's value
 getAttrValue elem attr attrs =
-    case value of
+    case lookup attr attrs of
         Nothing    -> Left ("Missing attribute in element " ++ elem ++ ": " ++ attr)
         Just value -> Right value
-    where value = fmap fst (find (\entry -> fst entry == attr) attrs)
 
 zXMLToBuilder :: ZXML -> Either String Builder
 zXMLToBuilder zxml = do
@@ -41,9 +41,9 @@ zXMLToBuilder zxml = do
           zattrs = attrs zxml
 
 textXMLToZXML :: Content -> Either String ZXML
-textXMLToZXML (Text CData {cdLine=cdLine}) = Left $ giveLineInMsg "Unexpected Text in XML" cdLine
-textXMLToZXML (CRef _)                     = Left "Unexpected CRef in XML"
-textXMLToZXML (Elem Element {elName=elName, elAttribs=elAttribs, elLine=elLine}) =
+textXMLToZXML (Text CData {cdLine}) = Left $ giveLineInMsg "Unexpected Text in XML" cdLine
+textXMLToZXML (CRef _)              = Left "Unexpected CRef in XML"
+textXMLToZXML (Elem Element {elName, elAttribs, elLine}) =
     return $ ZElem tag attrs elLine
     where tag :: String = qName elName
           attrs = map (\elAttr -> (qName $ attrKey elAttr, attrVal elAttr)) elAttribs
