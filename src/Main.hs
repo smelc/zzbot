@@ -9,7 +9,7 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
 import qualified Data.Map.Strict as Map
 
-runSubstedBuild :: Either [String] Builder -> IO ExitCode
+runSubstedBuild :: Either [ValidationError] Builder -> IO ExitCode
 runSubstedBuild eBuilder =
   case eBuilder of
      Left _        -> return $ ExitFailure 1
@@ -19,8 +19,8 @@ main :: IO ()
 main = do
   LT.putStrLn (renderAsXml shellCmd0)
   LT.putStrLn (renderAsXml builder)
-  let substedBuilder :: Either [String] Builder = substitute ("$[", "]") subst builder
-  LT.putStrLn (either (LT.pack . unlines) renderAsXml substedBuilder)
+  let substedBuilder :: Either [ValidationError] Builder = substitute ("$[", "]") subst builder
+  LT.putStrLn (either (LT.pack . unlines . map show) renderAsXml substedBuilder)
   rc :: ExitCode <- runSubstedBuild substedBuilder
   putStrLn $ "Builder finished with " ++ show rc
   where shellCmd0 :: Step = ShellCmd ["ls", "$[mydir]"]
