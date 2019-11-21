@@ -6,6 +6,7 @@ import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Modifiers
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Config hiding (prop)
 
@@ -73,11 +74,10 @@ testSubstitute =
       , ShellCmd ["ls", "xx", "yy"]
       ]
   badSubst = Map.fromList [("c", "xx")]
-  expectedErrors =
+  expectedErrors = Set.fromList
     [ KeyNotFound badSubst "a"
     , KeyNotFound badSubst "b"
-    , KeyNotFound badSubst "a"
-    , KeyNotFound badSubst "b"]
+    ]
 
 
 spec = do

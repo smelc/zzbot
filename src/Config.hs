@@ -10,6 +10,7 @@ import Text.Printf
 import Text.XML
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 
@@ -29,7 +30,7 @@ data Config = Config { builders :: [Builder], subst :: Subst }
 type Subst = Map.Map String String
 
 data ValidationError = KeyNotFound Subst String
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show ValidationError where
   show (KeyNotFound subst key) =
@@ -39,7 +40,7 @@ instance Show ValidationError where
 
 class Substable a where
     -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
-    substitute :: (String, String) -> Subst -> a -> Either [ValidationError] a
+    substitute :: (String, String) -> Subst -> a -> Either (Set.Set ValidationError) a
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -90,9 +91,9 @@ validateVars delimiters subst text =
 
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
-applySubstitution :: (String, String) -> Subst -> String -> Either [ValidationError] String
+applySubstitution :: (String, String) -> Subst -> String -> Either (Set.Set ValidationError) String
 applySubstitution delimiters subst text =
-    if not (null errors) then Left errors else
+    if not (null errors) then Left (Set.fromList errors) else
     Right (intercalate "" $ catMaybes pieces')
     where errors :: [ValidationError] = validateVars delimiters subst text
           pieces :: [Either String VarName] = parseVars delimiters text
