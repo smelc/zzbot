@@ -7,6 +7,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Modifiers
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Validation as V
 
 import Config hiding (prop)
 
@@ -58,9 +59,9 @@ testSubstitute :: SpecWith ()
 testSubstitute =
   describe "subsitute" $ do
     it "should succeed when all variables are known" $
-      substitute ("(", ")") goodSubst builder `shouldBe` Right expectedSuccess
+      substitute ("(", ")") goodSubst builder `shouldBe` V.Success expectedSuccess
     it "should fail when some variables are unknown" $
-      substitute ("(", ")") badSubst builder `shouldBe` Left expectedErrors
+      substitute ("(", ")") badSubst builder `shouldBe` V.Failure expectedErrors
  where
   builder =
     Builder "builder"

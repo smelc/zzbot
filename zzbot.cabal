@@ -23,6 +23,7 @@ executable zzbot
                        prettyprinter-ansi-terminal,
                        process,
                        text,
+                       validation,
                        xml,
                        xml-conduit,
 -- Until https://github.com/haskell/haskell-ide-engine/issues/1362 is sorted, we need tests dependencies in main dependencies:
@@ -45,6 +46,7 @@ test-suite spec
                        prettyprinter-ansi-terminal,
                        process,
                        text,
+                       validation,
                        xml-conduit,
                        hspec,
                        mtl,
