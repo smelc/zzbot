@@ -7,10 +7,12 @@ import Data.Either
 import Data.Either.Combinators
 import Data.List
 import Data.Maybe
+import Data.Validation
 import System.IO
 import Text.XML.Light.Types
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Text.XML.Light.Input as XmlInput
 
 import Config
@@ -25,37 +27,44 @@ giveLineInMsg errMsg (Just line) = "At line " ++ show line ++ ": " ++ errMsg
 
 data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML], maybeLine :: Maybe Line}
 
+data XmlParsingError
+  = MissingAttribute String String
+  | UnexpectedText (Maybe Line)
+  | UnexpectedCRef
+  deriving (Eq, Ord)
+
+instance Show XmlParsingError where
+  show (MissingAttribute elem attr) =  "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
+  show UnexpectedCRef = "Unexpected CRef in XML"
+
+type XmlParsingErrors = Set.Set XmlParsingError
+
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
              -> [(String, String)] -- ^ The actual list of attributes, with the value
-             -> Either String String -- ^ An error message or the attribute's value
+             -> Validation XmlParsingErrors String -- ^ An error message or the attribute's value
 getAttrValue elem attr attrs =
-    maybeToLeft errMsg $ lookup attr attrs
-    where errMsg = "Missing attribute in element " ++ elem ++ ": " ++ attr
+  validate (Set.singleton $ MissingAttribute elem attr) (lookup attr) attrs
 
-zXMLToStep :: ZXML -> Either String Step
+zXMLToStep :: ZXML -> Validation XmlParsingErrors Step
 zXMLToStep zxml = undefined
 
-zXMLToBuilder :: ZXML -> Either [String] Builder
-zXMLToBuilder zxml = do
-    name <- mapLeft pure $ getAttrValue elem "name" zattrs
-    if not $ null errs
-    then Left errs
-    else return $ Builder name steps
-    where elem = "builder"
-          zattrs = attrs zxml
-          (errs, steps) = partitionEithers $ map zXMLToStep (children zxml)
+zXMLToBuilder :: ZXML -> Validation XmlParsingErrors Builder
+zXMLToBuilder zxml = Builder <$> name <*> steps
+ where
+  name = getAttrValue "builder" "name" (attrs zxml)
+  steps = traverse zXMLToStep (children zxml)
 
-textXMLToZXML :: Content -> Either [String] ZXML
-textXMLToZXML (Text CData {cdLine}) = Left [giveLineInMsg "Unexpected Text in XML" cdLine]
-textXMLToZXML (CRef _)              = Left ["Unexpected CRef in XML"]
+textXMLToZXML :: Content -> Validation XmlParsingErrors ZXML
+textXMLToZXML (Text CData {cdLine}) = Failure (Set.singleton $ UnexpectedText cdLine)
+textXMLToZXML (CRef _)              = Failure (Set.singleton UnexpectedCRef)
 textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) =
-    if not $ null errs
-    then Left $ concat errs
-    else Right $ ZElem tag attrs children elLine
-    where tag :: String = qName elName
-          attrs = map (\elAttr -> (qName $ attrKey elAttr, attrVal elAttr)) elAttribs
-          (errs, children) = partitionEithers $ map textXMLToZXML elContent
+  ZElem tag attrs <$> children <*> pure elLine
+ where
+  tag = qName elName
+  attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
+  children = traverse textXMLToZXML elContent
 
 parseXmlString :: String                    -- ^ The XML Content
                -> Either [String] [Builder] -- ^ Either an error message, or the builders decoded from XML
@@ -67,6 +76,6 @@ parseXmlString xml =
 parseXmlFile :: String                         -- ^ A filename
              -> IO (Either [String] [Builder]) -- ^ The builders
 parseXmlFile filepath = do
-    handle :: Handle <- openFile filepath ReadMode  
-    contents :: String <- hGetContents handle 
+    handle :: Handle <- openFile filepath ReadMode
+    contents :: String <- hGetContents handle
     return $ parseXmlString contents
