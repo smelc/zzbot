@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ApplicativeDo #-}
 
 module XmlParse where
 
@@ -45,7 +46,9 @@ getAttrValue :: String -- ^ The element in which the attribute is being searched
              -> [(String, String)] -- ^ The actual list of attributes, with the value
              -> Validation XmlParsingErrors String -- ^ An error message or the attribute's value
 getAttrValue elem attr attrs =
-  validate (Set.singleton $ MissingAttribute elem attr) (lookup attr) attrs
+  case lookup attr attrs of
+    Just value -> Success value
+    Nothing -> Failure (Set.singleton $ MissingAttribute elem attr)
 
 zXMLToStep :: ZXML -> Validation XmlParsingErrors Step
 zXMLToStep zxml = undefined
@@ -59,12 +62,12 @@ zXMLToBuilder zxml = Builder <$> name <*> steps
 textXMLToZXML :: Content -> Validation XmlParsingErrors ZXML
 textXMLToZXML (Text CData {cdLine}) = Failure (Set.singleton $ UnexpectedText cdLine)
 textXMLToZXML (CRef _)              = Failure (Set.singleton UnexpectedCRef)
-textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) =
-  ZElem tag attrs <$> children <*> pure elLine
+textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
+  children <- traverse textXMLToZXML elContent
+  return $ ZElem tag attrs children elLine
  where
   tag = qName elName
   attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
-  children = traverse textXMLToZXML elContent
 
 parseXmlString :: String                    -- ^ The XML Content
                -> Either [String] [Builder] -- ^ Either an error message, or the builders decoded from XML
