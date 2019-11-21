@@ -5,6 +5,9 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Modifiers
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+import qualified Data.Validation as V
 
 import Config hiding (prop)
 
@@ -16,12 +19,11 @@ testParseVars =
       parseVars ("$(", ")") "foobar"  `shouldBe` [Left "foobar"]
     it "2" $
       parseVars ("$(", ")") "foo$(b)a$(r)"  `shouldBe` [Left "foo", Right "b", Left "a", Right "r"]
-    modifyMaxSuccess (const 1000) $
-      prop "pretty . parse . pretty = pretty" $
-        \(NonEmpty open) (NonEmpty close) chunks ->
-            let toStr = pretty open close
-                toAst = parseVars (open, close)
-            in (toStr. toAst . toStr) chunks === toStr chunks
+    prop "pretty . parse . pretty = pretty" $
+      \(NonEmpty open) (NonEmpty close) chunks ->
+          let toStr = pretty open close
+              toAst = parseVars (open, close)
+          in (toStr. toAst . toStr) chunks === toStr chunks
  where
   pretty open close = concatMap (prettyChunk open close)
   prettyChunk open close (Left str) = str
@@ -53,7 +55,34 @@ testSplitDelimiters =
     it "middle2" $
       splitDelimiters ("$(", ")") "foo$(var)" `shouldBe` Just("foo", "var", "")
 
+testSubstitute :: SpecWith ()
+testSubstitute =
+  describe "subsitute" $ do
+    it "should succeed when all variables are known" $
+      substitute ("(", ")") goodSubst builder `shouldBe` V.Success expectedSuccess
+    it "should fail when some variables are unknown" $
+      substitute ("(", ")") badSubst builder `shouldBe` V.Failure expectedErrors
+ where
+  builder =
+    Builder "builder"
+      [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
+      , ShellCmd ["ls", "(a)", "(b)"]
+      ]
+  goodSubst = Map.fromList [("a", "xx"), ("b", "yy")]
+  expectedSuccess =
+    Builder "builder"
+      [ SetPropertyFromValue "prop" "fooxxbaryybaz"
+      , ShellCmd ["ls", "xx", "yy"]
+      ]
+  badSubst = Map.fromList [("c", "xx")]
+  expectedErrors = Set.fromList
+    [ KeyNotFound badSubst "a"
+    , KeyNotFound badSubst "b"
+    ]
+
+
 spec = do
   testParseVars
   testSplitAround
   testSplitDelimiters
+  testSubstitute

@@ -6,10 +6,12 @@ module Config where
 import Data.Either
 import Data.List
 import Data.Maybe
+import Data.Validation
 import Text.Printf
 import Text.XML
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 
@@ -17,15 +19,29 @@ import qualified Data.Text.Lazy as LT
 data Step =
       SetPropertyFromValue { prop :: String, value :: String }
     | ShellCmd             { cmd :: [String] }
+  deriving (Eq, Show)
+
 data Builder = Builder { name :: String, steps :: [Step] }
+  deriving (Eq, Show)
+
 data Config = Config { builders :: [Builder], subst :: Subst }
+  deriving (Eq, Show)
 
 -- types
 type Subst = Map.Map String String
 
+data ValidationError = KeyNotFound Subst String
+  deriving (Eq, Ord)
+
+instance Show ValidationError where
+  show (KeyNotFound subst key) =
+    printf "key not mapped by substitution: %s. Substitution's domain is: %s" key domain
+   where
+    domain = unwords (Map.keys subst)
+
 class Substable a where
     -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
-    substitute :: (String, String) -> Subst -> a -> Either [String] a
+    substitute :: (String, String) -> Subst -> a -> Validation (Set.Set ValidationError) a
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -67,24 +83,24 @@ parseVars delimiters text =
 validateVars :: (String, String) -- ^ The pair of opening and closing delimiters
              -> Subst            -- ^ The substitution
              -> String           -- ^ The text to substitute
-             -> [String]         -- ^ A list of errors
+             -> [ValidationError]         -- ^ A list of errors
 validateVars delimiters subst text =
-    map (\key -> printf "key not mapped by substitution: %s. Substitution's domain is: %s" key domain) missingVars
+    map (KeyNotFound subst) missingVars
     where allVars = rights (parseVars delimiters text)
           missingVars = filter (`Map.notMember` subst) allVars
           domain = unwords $ Map.keys subst
 
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
-applySubstitution :: (String, String) -> Subst -> String -> Either [String] String
+applySubstitution :: (String, String) -> Subst -> String -> Validation (Set.Set ValidationError) String
 applySubstitution delimiters subst text =
-    if not (null errors) then Left errors else
-    Right (intercalate "" $ catMaybes pieces')
-    where errors :: [String] = validateVars delimiters subst text
+    if not (null errors)
+      then Failure (Set.fromList errors)
+      else Success (concatMap substApplier pieces)
+    where errors :: [ValidationError] = validateVars delimiters subst text
           pieces :: [Either String VarName] = parseVars delimiters text
-          substApplier (Left text) = Just text
-          substApplier (Right varName) = Map.lookup varName subst
-          pieces' = map substApplier pieces
+          substApplier (Left text) = text
+          substApplier (Right varName) = subst Map.! varName
 
 ---------
 -- XML --
@@ -121,26 +137,18 @@ renderAsXml x = renderText settings doc
 -- instance Substable String where
 --    substitute delimiters subst text = applySubstitution delimiters subst text
 
-mapEither :: Monoid b => (a -> Either b c) -> [a] -> Either b [c]
-mapEither f xs =
-    let (errors, results) = partitionEithers (map f xs)
-    in if not (null errors)
-        then Left (mconcat errors)
-        else Right results
-
 -- Lift substitute to lists
 instance Substable a => Substable [a] where
-    substitute delimiters subst = mapEither (substitute delimiters subst)
+    substitute delimiters subst = traverse (substitute delimiters subst)
 
 instance Substable Step where
-    substitute delimiters subst (SetPropertyFromValue prop value) = do
-        valueImage <- applySubstitution delimiters subst value
-        return (SetPropertyFromValue prop valueImage)
-    substitute delimiters subst (ShellCmd cmds) =
-        ShellCmd <$> mapEither (applySubstitution delimiters subst) cmds
+  substitute delimiters subst (SetPropertyFromValue prop value) =
+    SetPropertyFromValue prop <$> applySubstitution delimiters subst value
+  substitute delimiters subst (ShellCmd cmds) =
+    ShellCmd <$> traverse (applySubstitution delimiters subst) cmds
 
 instance Substable Builder where
-    substitute delimiters subst (Builder name steps) = do
-        substedName <- applySubstitution delimiters subst name
-        substedSteps <- substitute delimiters subst steps
-        return (Builder substedName substedSteps)
+  substitute delimiters subst (Builder name steps) =
+    Builder
+      <$> applySubstitution delimiters subst name
+      <*> substitute delimiters subst steps
