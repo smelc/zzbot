@@ -30,6 +30,7 @@ data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML
 
 data XmlParsingError
   = MissingAttribute String String
+  | UnexpectedTag String String (Maybe Line) -- ^ The expected tag, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
   deriving (Eq, Ord)
@@ -41,6 +42,15 @@ instance Show XmlParsingError where
 
 type XmlParsingErrors = Set.Set XmlParsingError
 
+checkTag :: String -- ^ The expected tag
+         -> ZXML   -- ^ The element to check
+         -> Maybe XmlParsingErrors
+-- ^ Checks that the tag is the first argument. If yes returns Nothing, else an error
+checkTag tag ZElem {tag=actual, maybeLine} =
+  if actual == tag
+  then Nothing
+  else Just $ Set.singleton $ UnexpectedTag tag actual maybeLine
+
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
              -> [(String, String)] -- ^ The actual list of attributes, with the value
@@ -50,13 +60,29 @@ getAttrValue elem attr attrs =
     Just value -> Success value
     Nothing -> Failure (Set.singleton $ MissingAttribute elem attr)
 
+zxmlToShellCmd :: ZXML -> Validation XmlParsingErrors Step
+zxmlToShellCmd zxml =
+  case shellTag of
+    Nothing -> ShellCmd <$> cmdArg
+    Just err -> Failure err
+  where zattrs = attrs zxml
+        shellTag :: Maybe XmlParsingErrors = checkTag "shell" zxml
+        commandArg :: Validation XmlParsingErrors String = getAttrValue "shell" "command" zattrs
+        cmdArg :: Validation XmlParsingErrors [String] = fmap words commandArg
+
 zXMLToStep :: ZXML -> Validation XmlParsingErrors Step
-zXMLToStep zxml = undefined
+zXMLToStep zxml =
+  undefined
 
 zXMLToBuilder :: ZXML -> Validation XmlParsingErrors Builder
-zXMLToBuilder zxml = Builder <$> name <*> steps
+zXMLToBuilder zxml = 
+  case checkTag tag zxml of -- @polux: can this be made more haskellish using some fancy Maybe/Validation combinator?
+    Nothing -> Builder <$> name <*> steps
+    Just tagErr -> Failure tagErr
  where
-  name = getAttrValue "builder" "name" (attrs zxml)
+  tag = "builder"
+  _ = checkTag tag zxml
+  name = getAttrValue tag "name" (attrs zxml)
   steps = traverse zXMLToStep (children zxml)
 
 textXMLToZXML :: Content -> Validation XmlParsingErrors ZXML
