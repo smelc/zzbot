@@ -41,6 +41,7 @@ instance Show XmlParsingError where
   show UnexpectedCRef = "Unexpected CRef in XML"
 
 type XmlParsingErrors = Set.Set XmlParsingError
+type XmlValidation = Validation XmlParsingErrors
 
 checkTag :: String -- ^ The expected tag
          -> ZXML   -- ^ The element to check
@@ -54,13 +55,13 @@ checkTag tag ZElem {tag=actual, maybeLine} =
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
              -> [(String, String)] -- ^ The actual list of attributes, with the value
-             -> Validation XmlParsingErrors String -- ^ An error message or the attribute's value
+             -> XmlValidation String -- ^ An error message or the attribute's value
 getAttrValue elem attr attrs =
   case lookup attr attrs of
     Just value -> Success value
     Nothing -> Failure (Set.singleton $ MissingAttribute elem attr)
 
-zxmlToShellCmd :: ZXML -> Validation XmlParsingErrors Step
+zxmlToShellCmd :: ZXML -> XmlValidation Step
 zxmlToShellCmd zxml =
   case shellTag of
     Nothing -> ShellCmd <$> cmdArg
@@ -70,22 +71,21 @@ zxmlToShellCmd zxml =
         commandArg :: Validation XmlParsingErrors String = getAttrValue "shell" "command" zattrs
         cmdArg :: Validation XmlParsingErrors [String] = fmap words commandArg
 
-zXMLToStep :: ZXML -> Validation XmlParsingErrors Step
+zXMLToStep :: ZXML -> XmlValidation Step
 zXMLToStep zxml =
   undefined
 
-zXMLToBuilder :: ZXML -> Validation XmlParsingErrors Builder
+zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml = 
   case checkTag tag zxml of -- @polux: can this be made more haskellish using some fancy Maybe/Validation combinator?
     Nothing -> Builder <$> name <*> steps
     Just tagErr -> Failure tagErr
- where
-  tag = "builder"
-  _ = checkTag tag zxml
-  name = getAttrValue tag "name" (attrs zxml)
-  steps = traverse zXMLToStep (children zxml)
+  where tag = "builder"
+        _ = checkTag tag zxml
+        name = getAttrValue tag "name" (attrs zxml)
+        steps = traverse zXMLToStep (children zxml)
 
-textXMLToZXML :: Content -> Validation XmlParsingErrors ZXML
+textXMLToZXML :: Content -> XmlValidation ZXML
 textXMLToZXML (Text CData {cdLine}) = Failure (Set.singleton $ UnexpectedText cdLine)
 textXMLToZXML (CRef _)              = Failure (Set.singleton UnexpectedCRef)
 textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
@@ -95,15 +95,15 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
   tag = qName elName
   attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
 
-parseXmlString :: String                    -- ^ The XML Content
-               -> Either [String] [Builder] -- ^ Either an error message, or the builders decoded from XML
+parseXmlString :: String                  -- ^ The XML Content
+               -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
 parseXmlString xml =
     undefined
     where contents :: [Content] = XmlInput.parseXML xml
           zxmls = map textXMLToZXML contents
 
-parseXmlFile :: String                         -- ^ A filename
-             -> IO (Either [String] [Builder]) -- ^ The builders
+parseXmlFile :: String                       -- ^ A filename
+             -> IO (XmlValidation [Builder]) -- ^ The builders
 parseXmlFile filepath = do
     handle :: Handle <- openFile filepath ReadMode
     contents :: String <- hGetContents handle
