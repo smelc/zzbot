@@ -36,21 +36,25 @@ data XmlParsingError
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
-  show (MissingAttribute elem attr) =  "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (MissingAttribute elem attr) = "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (UnexpectedTag expected actual line) = giveLineInMsg ("Expected " ++ expected ++ ", got " ++ actual) line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
   show UnexpectedCRef = "Unexpected CRef in XML"
 
 type XmlParsingErrors = Set.Set XmlParsingError
 type XmlValidation = Validation XmlParsingErrors
 
+failWith :: XmlParsingError -> XmlValidation a
+failWith error = Failure (Set.singleton error)
+
 checkTag :: String -- ^ The expected tag
          -> ZXML   -- ^ The element to check
-         -> Maybe XmlParsingErrors
--- ^ Checks that the tag is the first argument. If yes returns Nothing, else an error
+         -> XmlValidation ()
+-- ^ Checks that the tag is the first argument.
 checkTag tag ZElem {tag=actual, maybeLine} =
   if actual == tag
-  then Nothing
-  else Just $ Set.singleton $ UnexpectedTag tag actual maybeLine
+    then Success ()
+    else failWith (UnexpectedTag tag actual maybeLine)
 
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
@@ -59,35 +63,30 @@ getAttrValue :: String -- ^ The element in which the attribute is being searched
 getAttrValue elem attr attrs =
   case lookup attr attrs of
     Just value -> Success value
-    Nothing -> Failure (Set.singleton $ MissingAttribute elem attr)
+    Nothing -> failWith (MissingAttribute elem attr)
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml =
-  case shellTag of
-    Nothing -> ShellCmd <$> cmdArg
-    Just err -> Failure err
-  where zattrs = attrs zxml
-        shellTag :: Maybe XmlParsingErrors = checkTag "shell" zxml
-        commandArg :: Validation XmlParsingErrors String = getAttrValue "shell" "command" zattrs
-        cmdArg :: Validation XmlParsingErrors [String] = fmap words commandArg
+zxmlToShellCmd zxml@ZElem {attrs} = do
+  checkTag "shell" zxml
+  cmdArg <- words <$> getAttrValue "shell" "command" attrs
+  return $ ShellCmd cmdArg
 
 zXMLToStep :: ZXML -> XmlValidation Step
 zXMLToStep zxml =
   undefined
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
-zXMLToBuilder zxml = 
-  case checkTag tag zxml of -- @polux: can this be made more haskellish using some fancy Maybe/Validation combinator?
-    Nothing -> Builder <$> name <*> steps
-    Just tagErr -> Failure tagErr
-  where tag = "builder"
-        _ = checkTag tag zxml
-        name = getAttrValue tag "name" (attrs zxml)
-        steps = traverse zXMLToStep (children zxml)
+zXMLToBuilder zxml@ZElem {attrs, children} = do
+  checkTag tag zxml
+  name <- getAttrValue tag "name" attrs
+  steps <- traverse zXMLToStep children
+  return $ Builder name steps
+ where
+  tag = "builder"
 
 textXMLToZXML :: Content -> XmlValidation ZXML
-textXMLToZXML (Text CData {cdLine}) = Failure (Set.singleton $ UnexpectedText cdLine)
-textXMLToZXML (CRef _)              = Failure (Set.singleton UnexpectedCRef)
+textXMLToZXML (Text CData {cdLine}) = failWith (UnexpectedText cdLine)
+textXMLToZXML (CRef _)              = failWith UnexpectedCRef
 textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
   children <- traverse textXMLToZXML elContent
   return $ ZElem tag attrs children elLine
