@@ -45,12 +45,12 @@ type XmlValidation = Validation XmlParsingErrors
 
 checkTag :: String -- ^ The expected tag
          -> ZXML   -- ^ The element to check
-         -> Maybe XmlParsingErrors
--- ^ Checks that the tag is the first argument. If yes returns Nothing, else an error
+         -> XmlValidation ()
+-- ^ Checks that the tag is the first argument.
 checkTag tag ZElem {tag=actual, maybeLine} =
   if actual == tag
-  then Nothing
-  else Just $ Set.singleton $ UnexpectedTag tag actual maybeLine
+    then Success ()
+    else Failure (Set.singleton $ UnexpectedTag tag actual maybeLine)
 
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
@@ -62,28 +62,23 @@ getAttrValue elem attr attrs =
     Nothing -> Failure (Set.singleton $ MissingAttribute elem attr)
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml =
-  case shellTag of
-    Nothing -> ShellCmd <$> cmdArg
-    Just err -> Failure err
-  where zattrs = attrs zxml
-        shellTag :: Maybe XmlParsingErrors = checkTag "shell" zxml
-        commandArg :: Validation XmlParsingErrors String = getAttrValue "shell" "command" zattrs
-        cmdArg :: Validation XmlParsingErrors [String] = fmap words commandArg
+zxmlToShellCmd zxml@(ZElem {attrs}) = do
+  checkTag "shell" zxml
+  cmdArg <- words <$> getAttrValue "shell" "command" attrs
+  return $ ShellCmd cmdArg
 
 zXMLToStep :: ZXML -> XmlValidation Step
 zXMLToStep zxml =
   undefined
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
-zXMLToBuilder zxml = 
-  case checkTag tag zxml of -- @polux: can this be made more haskellish using some fancy Maybe/Validation combinator?
-    Nothing -> Builder <$> name <*> steps
-    Just tagErr -> Failure tagErr
-  where tag = "builder"
-        _ = checkTag tag zxml
-        name = getAttrValue tag "name" (attrs zxml)
-        steps = traverse zXMLToStep (children zxml)
+zXMLToBuilder zxml@(ZElem {attrs, children}) = do
+  checkTag tag zxml
+  name <- getAttrValue tag "name" attrs
+  steps <- traverse zXMLToStep children
+  return $ Builder name steps
+ where
+  tag = "builder"
 
 textXMLToZXML :: Content -> XmlValidation ZXML
 textXMLToZXML (Text CData {cdLine}) = Failure (Set.singleton $ UnexpectedText cdLine)
