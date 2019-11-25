@@ -36,7 +36,8 @@ data XmlParsingError
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
-  show (MissingAttribute elem attr) =  "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (MissingAttribute elem attr) = "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (UnexpectedTag expected actual line) = giveLineInMsg ("Expected " ++ expected ++ ", got " ++ actual) line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
   show UnexpectedCRef = "Unexpected CRef in XML"
 
