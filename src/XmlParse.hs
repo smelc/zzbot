@@ -66,7 +66,7 @@ getAttrValue elem attr attrs =
     Nothing -> failWith (MissingAttribute elem attr)
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml@(ZElem {attrs}) = do
+zxmlToShellCmd zxml@ZElem {attrs} = do
   checkTag "shell" zxml
   cmdArg <- words <$> getAttrValue "shell" "command" attrs
   return $ ShellCmd cmdArg
@@ -76,7 +76,7 @@ zXMLToStep zxml =
   undefined
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
-zXMLToBuilder zxml@(ZElem {attrs, children}) = do
+zXMLToBuilder zxml@ZElem {attrs, children} = do
   checkTag tag zxml
   name <- getAttrValue tag "name" attrs
   steps <- traverse zXMLToStep children
