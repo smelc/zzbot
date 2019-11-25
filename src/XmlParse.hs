@@ -65,15 +65,26 @@ getAttrValue elem attr attrs =
     Just value -> Success value
     Nothing -> failWith (MissingAttribute elem attr)
 
+zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
+zxmlToSetPropertyFromValue zxml@ZElem {attrs} = do
+  checkTag tag zxml
+  propArg <- getAttrValue tag "property" attrs
+  valueArg <- getAttrValue tag "value" attrs
+  return $ SetPropertyFromValue propArg valueArg
+  where tag = "setProperty"
+
 zxmlToShellCmd :: ZXML -> XmlValidation Step
 zxmlToShellCmd zxml@ZElem {attrs} = do
-  checkTag "shell" zxml
-  cmdArg <- words <$> getAttrValue "shell" "command" attrs
+  checkTag tag zxml
+  cmdArg <- words <$> getAttrValue tag "command" attrs
   return $ ShellCmd cmdArg
+  where tag = "shell"
 
 zXMLToStep :: ZXML -> XmlValidation Step
 zXMLToStep zxml =
   undefined
+  where setPropertyFromValue = zxmlToSetPropertyFromValue zxml
+        shellCmd = zxmlToShellCmd zxml
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml@ZElem {attrs, children} = do
