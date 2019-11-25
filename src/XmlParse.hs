@@ -43,6 +43,9 @@ instance Show XmlParsingError where
 type XmlParsingErrors = Set.Set XmlParsingError
 type XmlValidation = Validation XmlParsingErrors
 
+failWith :: XmlParsingError -> XmlValidation a
+failWith error = Failure (Set.singleton error)
+
 checkTag :: String -- ^ The expected tag
          -> ZXML   -- ^ The element to check
          -> XmlValidation ()
@@ -50,7 +53,7 @@ checkTag :: String -- ^ The expected tag
 checkTag tag ZElem {tag=actual, maybeLine} =
   if actual == tag
     then Success ()
-    else Failure (Set.singleton $ UnexpectedTag tag actual maybeLine)
+    else failWith (UnexpectedTag tag actual maybeLine)
 
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
@@ -59,7 +62,7 @@ getAttrValue :: String -- ^ The element in which the attribute is being searched
 getAttrValue elem attr attrs =
   case lookup attr attrs of
     Just value -> Success value
-    Nothing -> Failure (Set.singleton $ MissingAttribute elem attr)
+    Nothing -> failWith (MissingAttribute elem attr)
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
 zxmlToShellCmd zxml@(ZElem {attrs}) = do
@@ -81,8 +84,8 @@ zXMLToBuilder zxml@(ZElem {attrs, children}) = do
   tag = "builder"
 
 textXMLToZXML :: Content -> XmlValidation ZXML
-textXMLToZXML (Text CData {cdLine}) = Failure (Set.singleton $ UnexpectedText cdLine)
-textXMLToZXML (CRef _)              = Failure (Set.singleton UnexpectedCRef)
+textXMLToZXML (Text CData {cdLine}) = failWith (UnexpectedText cdLine)
+textXMLToZXML (CRef _)              = failWith UnexpectedCRef
 textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
   children <- traverse textXMLToZXML elContent
   return $ ZElem tag attrs children elLine
