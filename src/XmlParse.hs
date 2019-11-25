@@ -33,6 +33,7 @@ data XmlParsingError
   | UnexpectedTag String String (Maybe Line) -- ^ The expected tag, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
+  | UnrecognizedStep (Maybe Line)
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
@@ -40,6 +41,7 @@ instance Show XmlParsingError where
   show (UnexpectedTag expected actual line) = giveLineInMsg ("Expected " ++ expected ++ ", got " ++ actual) line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
   show UnexpectedCRef = "Unexpected CRef in XML"
+  show (UnrecognizedStep cdLine) = giveLineInMsg "Unrecognized step" cdLine
 
 type XmlParsingErrors = Set.Set XmlParsingError
 type XmlValidation = Validation XmlParsingErrors
@@ -80,11 +82,19 @@ zxmlToShellCmd zxml@ZElem {attrs} = do
   return $ ShellCmd cmdArg
   where tag = "shell"
 
+firstSuccess :: err -- ^ The failure to use if the list doesn't contain any Success
+             -> [Validation err a] -- ^ The list whose first Success is returned (if any)
+             -> Validation err a
+firstSuccess err [] = Failure err           -- No Success found, use failure given as argument
+firstSuccess err (res@(Success a):vs) = res -- Take first Success encountered
+firstSuccess err (Failure _:vs)       = firstSuccess err vs -- recurse
+
 zXMLToStep :: ZXML -> XmlValidation Step
 zXMLToStep zxml =
-  undefined
+  firstSuccess (Set.singleton $ UnrecognizedStep (maybeLine zxml)) matches
   where setPropertyFromValue = zxmlToSetPropertyFromValue zxml
         shellCmd = zxmlToShellCmd zxml
+        matches :: [Validation XmlParsingErrors Step] = [setPropertyFromValue, shellCmd]
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml@ZElem {attrs, children} = do
