@@ -6,6 +6,7 @@ module XmlParse where
 
 import Data.Either
 import Data.Either.Combinators
+import Data.Functor.Alt
 import Data.List
 import Data.Maybe
 import Data.Validation
@@ -82,19 +83,11 @@ zxmlToShellCmd zxml@ZElem {attrs} = do
   return $ ShellCmd cmdArg
   where tag = "shell"
 
-firstSuccess :: err -- ^ The failure to use if the list doesn't contain any Success
-             -> [Validation err a] -- ^ The list whose first Success is returned (if any)
-             -> Validation err a
-firstSuccess err [] = Failure err           -- No Success found, use failure given as argument
-firstSuccess err (res@(Success a):vs) = res -- Take first Success encountered
-firstSuccess err (Failure _:vs)       = firstSuccess err vs -- recurse
-
 zXMLToStep :: ZXML -> XmlValidation Step
 zXMLToStep zxml =
-  firstSuccess (Set.singleton $ UnrecognizedStep (maybeLine zxml)) matches
+  setPropertyFromValue <!> shellCmd <!> failWith (UnrecognizedStep (maybeLine zxml))
   where setPropertyFromValue = zxmlToSetPropertyFromValue zxml
         shellCmd = zxmlToShellCmd zxml
-        matches :: [Validation XmlParsingErrors Step] = [setPropertyFromValue, shellCmd]
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml@ZElem {attrs, children} = do
@@ -118,9 +111,9 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
 parseXmlString xml =
-    undefined
-    where contents :: [Content] = XmlInput.parseXML xml
-          zxmls = map textXMLToZXML contents
+  undefined
+  where contents :: [Content] = XmlInput.parseXML xml
+        zxmls :: [XmlValidation ZXML] = map textXMLToZXML contents
 
 parseXmlFile :: String                       -- ^ A filename
              -> IO (XmlValidation [Builder]) -- ^ The builders
