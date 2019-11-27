@@ -113,9 +113,8 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
-parseXmlString xml = sequenceA builders
+parseXmlString xml = traverse (maybezXMLToBuilder . textXMLToZXML) contents
   where contents :: [Content] = XmlInput.parseXML xml
-        builders :: [XmlValidation Builder] = map (maybezXMLToBuilder . textXMLToZXML) contents
 
 parseXmlFile :: String                       -- ^ A filename
              -> IO (XmlValidation [Builder]) -- ^ The builders
