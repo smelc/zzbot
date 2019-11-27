@@ -98,13 +98,8 @@ zXMLToBuilder zxml@ZElem {attrs, children} = do
  where
   tag = "builder"
 
--- @polux: does it have to be written that way ? I need a "(m a) -> (a -> m b) -> m b"
--- function here, which is what Monad provides, but Validation doesn't define Monad
 maybezXMLToBuilder :: XmlValidation ZXML -> XmlValidation Builder
-maybezXMLToBuilder vzxml = 
-  case vzxml of
-    Failure err -> Failure err
-    Success zxml -> zXMLToBuilder zxml
+maybezXMLToBuilder vzxml = bindValidation vzxml zXMLToBuilder
 
 textXMLToZXML :: Content -> XmlValidation ZXML
 textXMLToZXML (Text CData {cdLine}) = failWith (UnexpectedText cdLine)
