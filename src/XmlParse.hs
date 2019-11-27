@@ -4,6 +4,7 @@
 
 module XmlParse where
 
+import Data.Char
 import Data.Either
 import Data.Either.Combinators
 import Data.Functor.Alt
@@ -30,7 +31,8 @@ giveLineInMsg errMsg (Just line) = "At line " ++ show line ++ ": " ++ errMsg
 data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML], maybeLine :: Maybe Line}
 
 data XmlParsingError
-  = MissingAttribute String String
+  = EmptyDocument
+  | MissingAttribute String String
   | UnexpectedTag String String (Maybe Line) -- ^ The expected tag, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
@@ -38,6 +40,7 @@ data XmlParsingError
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
+  show EmptyDocument = "The document is empty"
   show (MissingAttribute elem attr) = "Missing attribute in element " ++ elem ++ ": " ++ attr
   show (UnexpectedTag expected actual line) = giveLineInMsg ("Expected " ++ expected ++ ", got " ++ actual) line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
@@ -98,23 +101,30 @@ zXMLToBuilder zxml@ZElem {attrs, children} = do
  where
   tag = "builder"
 
-maybezXMLToBuilder :: XmlValidation ZXML -> XmlValidation Builder
-maybezXMLToBuilder vzxml = bindValidation vzxml zXMLToBuilder
+fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
+fromJustZXml = maybe (failWith EmptyDocument) pure
 
-textXMLToZXML :: Content -> XmlValidation ZXML
-textXMLToZXML (Text CData {cdLine}) = failWith (UnexpectedText cdLine)
-textXMLToZXML (CRef _)              = failWith UnexpectedCRef
+textXMLToZXML :: Content -> XmlValidation (Maybe ZXML)
+textXMLToZXML (Text CData {cdData, cdLine})
+  | all isSpace cdData = pure Nothing
+  | otherwise = failWith (UnexpectedText cdLine)
+textXMLToZXML (CRef _) = failWith UnexpectedCRef
 textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
-  children :: [ZXML] <- traverse textXMLToZXML elContent
-  return $ ZElem tag attrs children elLine
+  children :: [ZXML] <- catMaybes <$> traverse textXMLToZXML elContent
+  return $ Just (ZElem tag attrs children elLine)
  where
   tag = qName elName
   attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
 
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
-parseXmlString xml = traverse (maybezXMLToBuilder . textXMLToZXML) contents
-  where contents :: [Content] = XmlInput.parseXML xml
+parseXmlString str = traverse transform (XmlInput.parseXML str)
+ where
+  transform :: Content -> XmlValidation Builder
+  transform xml =
+    textXMLToZXML xml
+      `bindValidation` fromJustZXml
+      `bindValidation` zXMLToBuilder
 
 parseXmlFile :: String                       -- ^ A filename
              -> IO (XmlValidation [Builder]) -- ^ The builders
