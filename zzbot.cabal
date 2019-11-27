@@ -49,11 +49,14 @@ test-suite spec
                        semigroupoids,
                        text,
                        validation,
+                       xml,
                        xml-conduit,
                        hspec,
                        mtl,
                        QuickCheck
-  other-modules:       Config,
-                       Exec,
-                       ConfigSpec,
-                       ExecSpec
+  other-modules:       Config
+                       , Exec
+                       , ConfigSpec
+                       , ExecSpec
+                       , XmlParse
+                       , XmlParseSpec
