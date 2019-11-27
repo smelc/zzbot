@@ -111,21 +111,11 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
   tag = qName elName
   attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
 
--- @polux: Once again I feel there must be a function to do that, I mean
--- I'm just accumulating errors which is what Validation is about
-split :: [XmlValidation a] -> (XmlParsingErrors, [a])
-split (Failure err:tl) = (Set.union err (fst rest), snd rest) where rest = split tl
-split (Success e:tl) = (fst rest, e:snd rest)                 where rest = split tl
-split [] = (Set.empty, [])
-
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
-parseXmlString xml =
-  if null errs then Success bs
-  else Failure errs
+parseXmlString xml = sequenceA builders
   where contents :: [Content] = XmlInput.parseXML xml
         builders :: [XmlValidation Builder] = map (maybezXMLToBuilder . textXMLToZXML) contents
-        (errs, bs) = split builders
 
 parseXmlFile :: String                       -- ^ A filename
              -> IO (XmlValidation [Builder]) -- ^ The builders
