@@ -7,25 +7,25 @@ import System.Exit
 import Test.Hspec
 import qualified Data.Set as Set
 
-badXml1 = "<foobar></foobar>"
+badXml1 = "<config><foobar></foobar></config>"
 expectedResultForBadXml1 = failWith (UnexpectedTag ["builder"] "foobar" (Just 1))
 
-badXml2 = "<builder></builder>"
+badXml2 = "<config><builder></builder></config>"
 expectedResultForBadXml2 = failWith (MissingAttribute "builder" "name")
 
-badXml3 = "<builder name=\"foo\"><foobar/></builder>"
+badXml3 = "<config><builder name=\"foo\"><foobar/></builder></config>"
 expectedResultForBadXml3 = failWith (UnexpectedTag ["setProperty", "shell"] "foobar" (Just 1))
 
-badXml4 = "<builder name=\"foo\"><shell/></builder>"
+badXml4 = "<config><builder name=\"foo\"><shell/></builder></config>"
 expectedResultForBadXml4 = failWith (MissingAttribute "shell" "command")
 
-badXml5 = "<builder name=\"foo\"><setProperty value=\"bar\"/></builder>"
+badXml5 = "<config><builder name=\"foo\"><setProperty value=\"bar\"/></builder></config>"
 expectedResultForBadXml5 =failWith (MissingAttribute "setProperty" "property")
 
-badXml6 = "<builder name=\"foo\"><setProperty property=\"foo\"/></builder>"
+badXml6 = "<config><builder name=\"foo\"><setProperty property=\"foo\"/></builder></config>"
 expectedResultForBadXml6 = failWith (MissingAttribute "setProperty" "value")
 
-badXml7 = "<builder><shell/><setProperty/><unknown/></builder>"
+badXml7 = "<config><builder><shell/><setProperty/><unknown/></builder></config>"
 expectedResultForBadXml7 =
   Failure $
     Set.fromList
@@ -37,10 +37,10 @@ expectedResultForBadXml7 =
       ]
 
 validXml =
-  "<builder name=\"ls builder\">\
+  "<config><builder name=\"ls builder\">\
   \  <shell command=\"ls /\"/>\
   \  <setProperty property=\"prop\" value=\"foobar\"/>\
-  \</builder>"
+  \</builder></config>"
 expectedResultForValidXml =
   Success
     [ Builder
@@ -55,7 +55,7 @@ expectedResultForValidXml =
 spec :: SpecWith ()
 spec =
   describe "parseXmlString" $ do
-    it "should succeed on valid XLM" $
+    it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml
     it "should fail on bad toplevel element" $
       parseXmlString badXml1 `shouldBe` expectedResultForBadXml1
