@@ -33,6 +33,7 @@ data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML
 data XmlParsingError
   = EmptyDocument
   | MissingAttribute String String
+  | NotExactlyOneRoot Int -- ^ The number of root elements found
   | UnexpectedTag String String (Maybe Line) -- ^ The expected tag, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
@@ -42,6 +43,7 @@ data XmlParsingError
 instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
   show (MissingAttribute elem attr) = "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (NotExactlyOneRoot n) = "Expected exactly one top-level element but found " ++ show n
   show (UnexpectedTag expected actual line) = giveLineInMsg ("Expected " ++ expected ++ ", got " ++ actual) line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
   show UnexpectedCRef = "Unexpected CRef in XML"
@@ -101,6 +103,14 @@ zXMLToBuilder zxml@ZElem {attrs, children} = do
  where
   tag = "builder"
 
+zXMLToBuilders :: ZXML -> XmlValidation [Builder]
+zXMLToBuilders zxml@ZElem {children, maybeLine} =
+  if actualTag == expectedTag
+  then traverse zXMLToBuilder children
+  else failWith $ UnexpectedTag expectedTag actualTag maybeLine
+  where actualTag = tag zxml
+        expectedTag = "config"
+
 fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
 fromJustZXml = maybe (failWith EmptyDocument) pure
 
@@ -118,13 +128,18 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
-parseXmlString str = traverse transform (XmlInput.parseXML str)
- where
-  transform :: Content -> XmlValidation Builder
+parseXmlString str =
+  if lzxml == 1
+  then transform $ head zxml
+  else failWith $ NotExactlyOneRoot lzxml
+  where
+  zxml :: [Content] = XmlInput.parseXML str
+  lzxml = length zxml
+  transform :: Content -> XmlValidation [Builder]
   transform xml =
     textXMLToZXML xml
       `bindValidation` fromJustZXml
-      `bindValidation` zXMLToBuilder
+      `bindValidation` zXMLToBuilders
 
 parseXmlFile :: String                       -- ^ A filename
              -> IO (XmlValidation [Builder]) -- ^ The builders
