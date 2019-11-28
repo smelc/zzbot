@@ -100,10 +100,9 @@ parseBuilder zxml@ZElem {tag, maybeLine}
   | otherwise = failWith (UnexpectedTag [tBuilder] tag maybeLine)
 
 zXMLToBuilders :: ZXML -> XmlValidation [Builder]
-zXMLToBuilders zxml@ZElem {children, maybeLine} =
-  if actualTag == expectedTag
-  then traverse parseBuilder children
-  else failWith $ UnexpectedTag [expectedTag] actualTag maybeLine
+zXMLToBuilders zxml@ZElem {children, maybeLine}
+  | actualTag == expectedTag = traverse parseBuilder children
+  | otherwise = failWith $ UnexpectedTag [expectedTag] actualTag maybeLine
   where actualTag = tag zxml
         expectedTag = "config"
 
