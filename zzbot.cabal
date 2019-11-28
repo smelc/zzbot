@@ -29,7 +29,6 @@ executable zzbot
                        xml-conduit,
 -- Until https://github.com/haskell/haskell-ide-engine/issues/1362 is sorted, we need tests dependencies in main dependencies:
                        hspec,
-                       lens,
                        mtl,
                        QuickCheck
   other-modules:       Config
@@ -44,7 +43,6 @@ test-suite spec
   build-depends:       base >= 4.7 && < 5,
                        containers,
                        either,
-                       lens,
                        prettyprinter,
                        prettyprinter-ansi-terminal,
                        process,
