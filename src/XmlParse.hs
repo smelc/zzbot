@@ -24,6 +24,11 @@ import Config
 -- Parsing of XML to create instances of Builder --
 ---------------------------------------------------
 
+tBuilder, tSetProperty, tShell :: String
+tBuilder = "builder"
+tSetProperty = "setProperty"
+tShell = "shell"
+
 giveLineInMsg :: String -> Maybe Line -> String
 giveLineInMsg errMsg Nothing = errMsg
 giveLineInMsg errMsg (Just line) = "At line " ++ show line ++ ": " ++ errMsg
@@ -34,35 +39,28 @@ data XmlParsingError
   = EmptyDocument
   | MissingAttribute String String
   | NotExactlyOneRoot Int -- ^ The number of root elements found
-  | UnexpectedTag String String (Maybe Line) -- ^ The expected tag, the actual tag
+  | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
-  | UnrecognizedStep (Maybe Line)
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
-  show (MissingAttribute elem attr) = "Missing attribute in element " ++ elem ++ ": " ++ attr
   show (NotExactlyOneRoot n) = "Expected exactly one top-level element but found " ++ show n
-  show (UnexpectedTag expected actual line) = giveLineInMsg ("Expected " ++ expected ++ ", got " ++ actual) line
+  show (MissingAttribute elem attr) =
+    "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (UnexpectedTag expected actual line) =
+    giveLineInMsg
+      ("Expected one of " ++ intercalate ", " expected ++ ", got " ++ actual)
+      line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
   show UnexpectedCRef = "Unexpected CRef in XML"
-  show (UnrecognizedStep cdLine) = giveLineInMsg "Unrecognized step" cdLine
 
 type XmlParsingErrors = Set.Set XmlParsingError
 type XmlValidation = Validation XmlParsingErrors
 
 failWith :: XmlParsingError -> XmlValidation a
 failWith error = Failure (Set.singleton error)
-
-checkTag :: String -- ^ The expected tag
-         -> ZXML   -- ^ The element to check
-         -> XmlValidation ()
--- ^ Checks that the tag is the first argument.
-checkTag tag ZElem {tag=actual, maybeLine} =
-  if actual == tag
-    then Success ()
-    else failWith (UnexpectedTag tag actual maybeLine)
 
 getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
              -> String -- ^ The attribute's name
@@ -75,39 +73,37 @@ getAttrValue elem attr attrs =
 
 zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
 zxmlToSetPropertyFromValue zxml@ZElem {attrs} = do
-  checkTag tag zxml
-  propArg <- getAttrValue tag "property" attrs
-  valueArg <- getAttrValue tag "value" attrs
+  propArg <- getAttrValue tSetProperty "property" attrs
+  valueArg <- getAttrValue tSetProperty "value" attrs
   return $ SetPropertyFromValue propArg valueArg
-  where tag = "setProperty"
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
 zxmlToShellCmd zxml@ZElem {attrs} = do
-  checkTag tag zxml
-  cmdArg <- words <$> getAttrValue tag "command" attrs
+  cmdArg <- words <$> getAttrValue tShell "command" attrs
   return $ ShellCmd cmdArg
-  where tag = "shell"
 
-zXMLToStep :: ZXML -> XmlValidation Step
-zXMLToStep zxml =
-  setPropertyFromValue <!> shellCmd <!> failWith (UnrecognizedStep (maybeLine zxml))
-  where setPropertyFromValue = zxmlToSetPropertyFromValue zxml
-        shellCmd = zxmlToShellCmd zxml
+parseStep :: ZXML -> XmlValidation Step
+parseStep zxml@ZElem {tag, maybeLine}
+  | tag == tSetProperty = zxmlToSetPropertyFromValue zxml
+  | tag == tShell = zxmlToShellCmd zxml
+  | otherwise = failWith (UnexpectedTag [tSetProperty, tShell] tag maybeLine)
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml@ZElem {attrs, children} = do
-  checkTag tag zxml
-  name <- getAttrValue tag "name" attrs
-  steps <- traverse zXMLToStep children
+  name <- getAttrValue tBuilder "name" attrs
+  steps <- traverse parseStep children
   return $ Builder name steps
- where
-  tag = "builder"
+
+parseBuilder :: ZXML -> XmlValidation Builder
+parseBuilder zxml@ZElem {tag, maybeLine}
+  | tag == tBuilder = zXMLToBuilder zxml
+  | otherwise = failWith (UnexpectedTag [tBuilder] tag maybeLine)
 
 zXMLToBuilders :: ZXML -> XmlValidation [Builder]
 zXMLToBuilders zxml@ZElem {children, maybeLine} =
   if actualTag == expectedTag
-  then traverse zXMLToBuilder children
-  else failWith $ UnexpectedTag expectedTag actualTag maybeLine
+  then traverse parseBuilder children
+  else failWith $ UnexpectedTag [expectedTag] actualTag maybeLine
   where actualTag = tag zxml
         expectedTag = "config"
 
