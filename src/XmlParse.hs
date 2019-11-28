@@ -24,10 +24,11 @@ import Config
 -- Parsing of XML to create instances of Builder --
 ---------------------------------------------------
 
-tBuilder, tSetProperty, tShell :: String
+tBuilder, tSetProperty, tShell, tConfig :: String
 tBuilder = "builder"
 tSetProperty = "setProperty"
 tShell = "shell"
+tConfig = "config"
 
 giveLineInMsg :: String -> Maybe Line -> String
 giveLineInMsg errMsg Nothing = errMsg
@@ -100,11 +101,9 @@ parseBuilder zxml@ZElem {tag, maybeLine}
   | otherwise = failWith (UnexpectedTag [tBuilder] tag maybeLine)
 
 zXMLToBuilders :: ZXML -> XmlValidation [Builder]
-zXMLToBuilders zxml@ZElem {children, maybeLine}
-  | actualTag == expectedTag = traverse parseBuilder children
-  | otherwise = failWith $ UnexpectedTag [expectedTag] actualTag maybeLine
-  where actualTag = tag zxml
-        expectedTag = "config"
+zXMLToBuilders zxml@ZElem {tag, children, maybeLine}
+  | tag == tConfig = traverse parseBuilder children
+  | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
 
 fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
 fromJustZXml = maybe (failWith EmptyDocument) pure
@@ -124,12 +123,10 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
 parseXmlString str =
-  if lzxml == 1
-  then transform $ head zxml
-  else failWith $ NotExactlyOneRoot lzxml
+  case XmlInput.parseXML str of
+    [xml] -> transform xml
+    xmls  -> failWith (NotExactlyOneRoot (length xmls))
   where
-  zxml :: [Content] = XmlInput.parseXML str
-  lzxml = length zxml
   transform :: Content -> XmlValidation [Builder]
   transform xml =
     textXMLToZXML xml
