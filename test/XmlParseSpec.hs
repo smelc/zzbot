@@ -1,7 +1,6 @@
 module XmlParseSpec (spec) where
 
 import Config
-import Control.Lens.Extras
 import Data.Validation
 import XmlParse
 import System.Exit
