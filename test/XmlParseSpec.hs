@@ -28,7 +28,7 @@ expectedResultForBadXml6 = failWith (MissingAttribute "setProperty" "value")
 badXml7 = "<builder><shell/><setProperty/><unknown/></builder>"
 expectedResultForBadXml7 =
   Failure $
-    Set.fromList $
+    Set.fromList
       [ UnexpectedTag ["setProperty", "shell"] "unknown" (Just 1)
       , MissingAttribute "builder" "name"
       , MissingAttribute "shell" "command"
