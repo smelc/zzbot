@@ -38,7 +38,7 @@ data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML
 
 data XmlParsingError
   = EmptyDocument
-  | MissingAttribute String String
+  | MissingAttribute String String (Maybe Line)
   | NotExactlyOneRoot Int -- ^ The number of root elements found
   | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
@@ -48,8 +48,10 @@ data XmlParsingError
 instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
   show (NotExactlyOneRoot n) = "Expected exactly one top-level element but found " ++ show n
-  show (MissingAttribute elem attr) =
-    "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (MissingAttribute elem attr line) =
+    giveLineInMsg
+      ("Missing attribute in element " ++ elem ++ ": " ++ attr)
+      line
   show (UnexpectedTag expected actual line) =
     giveLineInMsg
       ("Expected one of " ++ intercalate ", " expected ++ ", got " ++ actual)
@@ -63,24 +65,24 @@ type XmlValidation = Validation XmlParsingErrors
 failWith :: XmlParsingError -> XmlValidation a
 failWith error = Failure (Set.singleton error)
 
-getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
-             -> String -- ^ The attribute's name
-             -> [(String, String)] -- ^ The actual list of attributes, with the value
-             -> XmlValidation String -- ^ An error message or the attribute's value
-getAttrValue elem attr attrs =
+getAttrValue
+  :: ZXML -- ^ The element in which the attribute is being searched
+  -> String -- ^ The name of the attribute to look up
+  -> XmlValidation String -- ^ An error message or the attribute's value
+getAttrValue zxml@ZElem {tag, attrs, maybeLine} attr =
   case lookup attr attrs of
     Just value -> Success value
-    Nothing -> failWith (MissingAttribute elem attr)
+    Nothing -> failWith (MissingAttribute tag attr maybeLine)
 
 zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
-zxmlToSetPropertyFromValue zxml@ZElem {attrs} = do
-  propArg <- getAttrValue tSetProperty "property" attrs
-  valueArg <- getAttrValue tSetProperty "value" attrs
+zxmlToSetPropertyFromValue zxml = do
+  propArg <- getAttrValue zxml "property"
+  valueArg <- getAttrValue zxml "value"
   return $ SetPropertyFromValue propArg valueArg
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml@ZElem {attrs} = do
-  cmdArg <- words <$> getAttrValue tShell "command" attrs
+zxmlToShellCmd zxml = do
+  cmdArg <- words <$> getAttrValue zxml "command"
   return $ ShellCmd cmdArg
 
 parseStep :: ZXML -> XmlValidation Step
@@ -90,8 +92,8 @@ parseStep zxml@ZElem {tag, maybeLine}
   | otherwise = failWith (UnexpectedTag [tSetProperty, tShell] tag maybeLine)
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
-zXMLToBuilder zxml@ZElem {attrs, children} = do
-  name <- getAttrValue tBuilder "name" attrs
+zXMLToBuilder zxml@ZElem {children} = do
+  name <- getAttrValue zxml "name"
   steps <- traverse parseStep children
   return $ Builder name steps
 

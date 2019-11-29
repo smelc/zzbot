@@ -11,29 +11,29 @@ badXml1 = "<config><foobar></foobar></config>"
 expectedResultForBadXml1 = failWith (UnexpectedTag ["builder"] "foobar" (Just 1))
 
 badXml2 = "<config><builder></builder></config>"
-expectedResultForBadXml2 = failWith (MissingAttribute "builder" "name")
+expectedResultForBadXml2 = failWith (MissingAttribute "builder" "name" (Just 1))
 
 badXml3 = "<config><builder name=\"foo\"><foobar/></builder></config>"
 expectedResultForBadXml3 = failWith (UnexpectedTag ["setProperty", "shell"] "foobar" (Just 1))
 
 badXml4 = "<config><builder name=\"foo\"><shell/></builder></config>"
-expectedResultForBadXml4 = failWith (MissingAttribute "shell" "command")
+expectedResultForBadXml4 = failWith (MissingAttribute "shell" "command" (Just 1))
 
 badXml5 = "<config><builder name=\"foo\"><setProperty value=\"bar\"/></builder></config>"
-expectedResultForBadXml5 =failWith (MissingAttribute "setProperty" "property")
+expectedResultForBadXml5 =failWith (MissingAttribute "setProperty" "property" (Just 1))
 
 badXml6 = "<config><builder name=\"foo\"><setProperty property=\"foo\"/></builder></config>"
-expectedResultForBadXml6 = failWith (MissingAttribute "setProperty" "value")
+expectedResultForBadXml6 = failWith (MissingAttribute "setProperty" "value" (Just 1))
 
-badXml7 = "<config><builder><shell/><setProperty/><unknown/></builder></config>"
+badXml7 = "<config>\n<builder>\n<shell/>\n<setProperty/>\n<unknown/>\n</builder>\n</config>"
 expectedResultForBadXml7 =
   Failure $
     Set.fromList
-      [ UnexpectedTag ["setProperty", "shell"] "unknown" (Just 1)
-      , MissingAttribute "builder" "name"
-      , MissingAttribute "shell" "command"
-      , MissingAttribute "setProperty" "property"
-      , MissingAttribute "setProperty" "value"
+      [ UnexpectedTag ["setProperty", "shell"] "unknown" (Just 5)
+      , MissingAttribute "builder" "name" (Just 2)
+      , MissingAttribute "shell" "command" (Just 3)
+      , MissingAttribute "setProperty" "property" (Just 4)
+      , MissingAttribute "setProperty" "value" (Just 4)
       ]
 
 badXml8 = "<config/><config/>"
