@@ -39,7 +39,7 @@ data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML
 data XmlParsingError
   = EmptyDocument
   | MissingAttribute String String (Maybe Line)
-  | NotExactlyOneRoot Int -- ^ The number of root elements found
+  | NoRootElement
   | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
@@ -47,7 +47,7 @@ data XmlParsingError
 
 instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
-  show (NotExactlyOneRoot n) = "Expected exactly one top-level element but found " ++ show n
+  show NoRootElement = "Expected exactly one top-level element but found zero"
   show (MissingAttribute elem attr line) =
     giveLineInMsg
       ("Missing attribute in element " ++ elem ++ ": " ++ attr)
@@ -125,9 +125,9 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
 parseXmlString str =
-  case XmlInput.parseXML str of
-    [xml] -> transform xml
-    xmls  -> failWith (NotExactlyOneRoot (length xmls))
+  case XmlInput.parseXMLDoc str of
+    Nothing -> failWith NoRootElement
+    Just elem -> transform $ Elem elem
   where
   transform :: Content -> XmlValidation [Builder]
   transform xml =

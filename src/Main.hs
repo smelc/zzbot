@@ -24,7 +24,7 @@ renderErrors :: Set.Set ValidationError -> LT.Text
 renderErrors = LT.pack . unlines . map show . Set.toList
 
 data Argument =
-  Help -- ^ Help argument (-h and --help)
+    Help -- ^ Help argument (-h and --help)
   | File String -- ^ A filename
 
 parseArg :: String -> Argument
@@ -56,7 +56,7 @@ andExitCodes :: ExitCode -- ^ The value to return if the second argument is empt
             -> [ExitCode] -- ^ The list of return codes to combine
             -> ExitCode
 andExitCodes default_ [] = default_
-andExitCodes _ (hd:tl) = foldl andExitCode hd tl
+andExitCodes _ (hd:tl) = foldr andExitCode hd tl
 
 main :: IO ()
 main = do

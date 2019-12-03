@@ -36,14 +36,11 @@ expectedResultForBadXml7 =
       , MissingAttribute "setProperty" "value" (Just 4)
       ]
 
-badXml8 = "<config/><config/>"
-expectedResultForBadXml8 = failWith (NotExactlyOneRoot 2)
+badXml8 = ""
+expectedResultForBadXml8 = failWith NoRootElement
 
-badXml9 = ""
-expectedResultForBadXml9 = failWith (NotExactlyOneRoot 0)
-
-badXml10 = "<config>aa<builder name=\"foo\"/></config>"
-expectedResultForBadXml10 = failWith (UnexpectedText (Just 1))
+badXml9 = "<config>aa<builder name=\"foo\"/></config>"
+expectedResultForBadXml9 = failWith (UnexpectedText (Just 1))
 
 validXml =
   "<config><builder name=\"ls builder\">\
@@ -80,10 +77,8 @@ spec =
       parseXmlString badXml6 `shouldBe` expectedResultForBadXml6
     it "should collect many errors" $
       parseXmlString badXml7 `shouldBe` expectedResultForBadXml7
-    it "should fail on more than on config" $
-      parseXmlString badXml8 `shouldBe` expectedResultForBadXml8
     it "should fail on empty document" $
-      parseXmlString badXml9 `shouldBe` expectedResultForBadXml9
+      parseXmlString badXml8 `shouldBe` expectedResultForBadXml8
     it "should fail on text leaf" $
-      parseXmlString badXml10 `shouldBe` expectedResultForBadXml10
+      parseXmlString badXml9 `shouldBe` expectedResultForBadXml9
 
