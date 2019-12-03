@@ -2,9 +2,12 @@
 module Main where
 
 import Config
+import Data.Maybe
 import Data.Validation
 import Exec
+import System.Environment
 import System.Exit
+import XmlParse
 
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
@@ -20,8 +23,52 @@ runSubstedBuild eBuilder =
 renderErrors :: Set.Set ValidationError -> LT.Text
 renderErrors = LT.pack . unlines . map show . Set.toList
 
+data Argument =
+  Help -- ^ Help argument (-h and --help)
+  | File String -- ^ A filename
+
+parseArg :: String -> Argument
+parseArg "-h" = Help
+parseArg "--help" = Help
+parseArg s = File s
+
+process :: Argument -> IO ExitCode
+process Help = do
+  putStrLn "Usage: zzbot [-h|--help] xml_file0 xml_file1 .."
+  return ExitSuccess
+process (File path) = do
+  mbuilders :: XmlValidation[Builder] <- parseXmlFile path
+  case mbuilders of
+      Failure (err::Set.Set XmlParsingError) -> do
+        putStrLn $ unlines $ Set.toList serr
+        return $ ExitFailure 1
+        where serr :: Set.Set String = Set.map show err
+      Success (builders::[Builder]) -> do
+        codes :: [ExitCode] <- mapM runBuild builders
+        return $ andExitCodes (ExitFailure 1) codes -- If there are no builders, return a failure
+
+andExitCode (ExitFailure i) (ExitFailure j) = ExitFailure (max i j)
+andExitCode (ExitFailure i) _ = ExitFailure i
+andExitCode _ (ExitFailure j) = ExitFailure j
+andExitCode c1 c2 = c1
+
+andExitCodes :: ExitCode -- ^ The value to return if the second argument is empty
+            -> [ExitCode] -- ^ The list of return codes to combine
+            -> ExitCode
+andExitCodes default_ [] = default_
+andExitCodes _ (hd:tl) = foldl andExitCode hd tl
+
 main :: IO ()
 main = do
+  args :: [String] <- getArgs
+  let zargs :: [Argument] = map parseArg args
+      exits :: [IO ExitCode] = map process zargs
+  codes :: [ExitCode] <- sequence exits
+  exitWith $ andExitCodes (ExitFailure 1) codes
+
+-- kept for future reference:
+main0 :: IO ()
+main0 = do
   LT.putStrLn (renderAsXml shellCmd0)
   LT.putStrLn (renderAsXml builder)
   LT.putStrLn (validation renderErrors renderAsXml substedBuilder)
