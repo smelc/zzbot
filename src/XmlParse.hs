@@ -24,10 +24,11 @@ import Config
 -- Parsing of XML to create instances of Builder --
 ---------------------------------------------------
 
-tBuilder, tSetProperty, tShell :: String
+tBuilder, tSetProperty, tShell, tConfig :: String
 tBuilder = "builder"
 tSetProperty = "setProperty"
 tShell = "shell"
+tConfig = "config"
 
 giveLineInMsg :: String -> Maybe Line -> String
 giveLineInMsg errMsg Nothing = errMsg
@@ -37,7 +38,7 @@ data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML
 
 data XmlParsingError
   = EmptyDocument
-  | MissingAttribute String String
+  | MissingAttribute String String (Maybe Line)
   | NotExactlyOneRoot Int -- ^ The number of root elements found
   | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
@@ -47,8 +48,10 @@ data XmlParsingError
 instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
   show (NotExactlyOneRoot n) = "Expected exactly one top-level element but found " ++ show n
-  show (MissingAttribute elem attr) =
-    "Missing attribute in element " ++ elem ++ ": " ++ attr
+  show (MissingAttribute elem attr line) =
+    giveLineInMsg
+      ("Missing attribute in element " ++ elem ++ ": " ++ attr)
+      line
   show (UnexpectedTag expected actual line) =
     giveLineInMsg
       ("Expected one of " ++ intercalate ", " expected ++ ", got " ++ actual)
@@ -62,24 +65,24 @@ type XmlValidation = Validation XmlParsingErrors
 failWith :: XmlParsingError -> XmlValidation a
 failWith error = Failure (Set.singleton error)
 
-getAttrValue :: String -- ^ The element in which the attribute is being searched (for error messages)
-             -> String -- ^ The attribute's name
-             -> [(String, String)] -- ^ The actual list of attributes, with the value
-             -> XmlValidation String -- ^ An error message or the attribute's value
-getAttrValue elem attr attrs =
+getAttrValue
+  :: ZXML -- ^ The element in which the attribute is being searched
+  -> String -- ^ The name of the attribute to look up
+  -> XmlValidation String -- ^ An error message or the attribute's value
+getAttrValue zxml@ZElem {tag, attrs, maybeLine} attr =
   case lookup attr attrs of
     Just value -> Success value
-    Nothing -> failWith (MissingAttribute elem attr)
+    Nothing -> failWith (MissingAttribute tag attr maybeLine)
 
 zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
-zxmlToSetPropertyFromValue zxml@ZElem {attrs} = do
-  propArg <- getAttrValue tSetProperty "property" attrs
-  valueArg <- getAttrValue tSetProperty "value" attrs
+zxmlToSetPropertyFromValue zxml = do
+  propArg <- getAttrValue zxml "property"
+  valueArg <- getAttrValue zxml "value"
   return $ SetPropertyFromValue propArg valueArg
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml@ZElem {attrs} = do
-  cmdArg <- words <$> getAttrValue tShell "command" attrs
+zxmlToShellCmd zxml = do
+  cmdArg <- words <$> getAttrValue zxml "command"
   return $ ShellCmd cmdArg
 
 parseStep :: ZXML -> XmlValidation Step
@@ -89,8 +92,8 @@ parseStep zxml@ZElem {tag, maybeLine}
   | otherwise = failWith (UnexpectedTag [tSetProperty, tShell] tag maybeLine)
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
-zXMLToBuilder zxml@ZElem {attrs, children} = do
-  name <- getAttrValue tBuilder "name" attrs
+zXMLToBuilder zxml@ZElem {children} = do
+  name <- getAttrValue zxml "name"
   steps <- traverse parseStep children
   return $ Builder name steps
 
@@ -100,11 +103,9 @@ parseBuilder zxml@ZElem {tag, maybeLine}
   | otherwise = failWith (UnexpectedTag [tBuilder] tag maybeLine)
 
 zXMLToBuilders :: ZXML -> XmlValidation [Builder]
-zXMLToBuilders zxml@ZElem {children, maybeLine}
-  | actualTag == expectedTag = traverse parseBuilder children
-  | otherwise = failWith $ UnexpectedTag [expectedTag] actualTag maybeLine
-  where actualTag = tag zxml
-        expectedTag = "config"
+zXMLToBuilders zxml@ZElem {tag, children, maybeLine}
+  | tag == tConfig = traverse parseBuilder children
+  | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
 
 fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
 fromJustZXml = maybe (failWith EmptyDocument) pure
@@ -124,12 +125,10 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 parseXmlString :: String                  -- ^ The XML Content
                -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
 parseXmlString str =
-  if lzxml == 1
-  then transform $ head zxml
-  else failWith $ NotExactlyOneRoot lzxml
+  case XmlInput.parseXML str of
+    [xml] -> transform xml
+    xmls  -> failWith (NotExactlyOneRoot (length xmls))
   where
-  zxml :: [Content] = XmlInput.parseXML str
-  lzxml = length zxml
   transform :: Content -> XmlValidation [Builder]
   transform xml =
     textXMLToZXML xml
