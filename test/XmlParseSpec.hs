@@ -1,10 +1,12 @@
 module XmlParseSpec (spec) where
 
 import Config
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Validation
 import XmlParse
 import System.Exit
 import Test.Hspec
+
 import qualified Data.Set as Set
 
 badXml1 = "<config><foobar></foobar></config>"
@@ -42,21 +44,24 @@ expectedResultForBadXml8 = failWith NoRootElement
 badXml9 = "<config>aa<builder name=\"foo\"/></config>"
 expectedResultForBadXml9 = failWith (UnexpectedText (Just 1))
 
+badXml10 = "<config></config>"
+expectedResultForBadXml10 = failWith (NoBuilder (Just 1))
+
 validXml =
   "<config><builder name=\"ls builder\">\
   \  <shell command=\"ls /\"/>\
   \  <setProperty property=\"prop\" value=\"foobar\"/>\
   \</builder></config>"
-expectedResultForValidXml =
-  Success
-    [ Builder
-        { name = "ls builder"
-        , steps =
-          [ ShellCmd { cmd = ["ls", "/"] }
-          , SetPropertyFromValue { prop = "prop", value = "foobar" }
-          ]
-        }
-    ]
+expectedResultForValidXml = Success (builder :| [])
+ where
+  builder =
+    Builder
+      { name = "ls builder"
+      , steps =
+        [ ShellCmd { cmd = ["ls", "/"] }
+        , SetPropertyFromValue { prop = "prop", value = "foobar" }
+        ]
+      }
 
 spec :: SpecWith ()
 spec =
@@ -81,4 +86,6 @@ spec =
       parseXmlString badXml8 `shouldBe` expectedResultForBadXml8
     it "should fail on text leaf" $
       parseXmlString badXml9 `shouldBe` expectedResultForBadXml9
+    it "should fail on configs with no builder" $
+      parseXmlString badXml10 `shouldBe` expectedResultForBadXml10
 
