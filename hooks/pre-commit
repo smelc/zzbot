@@ -42,9 +42,9 @@ fi
 
 # Check that code compiles and is warnings free
 stack build || exit $?
-
 # Check that tests pass
 stack test || exit $?
-
 # Check that hints are applied
 stack exec hlint . || exit $?
+# Check that zzbot succeeds on a simple configuration
+stack exec zzbot -- configs/config.xml

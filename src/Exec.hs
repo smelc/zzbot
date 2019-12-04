@@ -1,8 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- File to exec a build specified as a Builder
-module Exec where
+-- File to execute a build specified as a Builder
+module Exec (
+  MonadExec(..)
+  , runBuild
+ ) where
 
 import Control.Monad
 import Data.Text.Prettyprint.Doc

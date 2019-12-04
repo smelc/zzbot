@@ -54,7 +54,6 @@ main = do
   exitWith $ andExitCodes codes
 
 -- kept for future reference:
-
 runSubstedBuild :: Validation (Set.Set ValidationError) Builder -> IO ExitCode
 runSubstedBuild eBuilder =
   case eBuilder of

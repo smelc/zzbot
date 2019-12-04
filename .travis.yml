@@ -41,3 +41,5 @@ script:
 - curl -sSL https://raw.github.com/ndmitchell/neil/master/misc/travis.sh | sh -s -- hlint .
 # Generate documentation from sources
 - stack exec haddock -- --html $(find src -name \*.hs) -o html
+# Execute on a versioned config
+- stack exec zzbot -- configs/config.xml

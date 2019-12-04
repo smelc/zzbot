@@ -2,7 +2,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ApplicativeDo #-}
 
-module XmlParse where
+module XmlParse (
+  failWith
+  , parseXmlFile
+  , parseXmlString
+  , XmlParsingError(..)
+  , XmlValidation
+) where
 
 import Data.Char
 import Data.Either
