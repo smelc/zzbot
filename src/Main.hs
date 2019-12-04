@@ -37,8 +37,9 @@ andExitCode c1 c2 = c1
 andExitCodes
   :: NonEmpty ExitCode -- ^ The list of return codes to combine
   -> ExitCode
-andExitCodes codes = foldr1 andExitCode codes
+andExitCodes = foldr1 andExitCode
 
+{- HLINT ignore Options -}
 data Options = Options { optFilenames :: NonEmpty String }
 
 optionsParser :: Opt.Parser Options
