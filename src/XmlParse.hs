@@ -15,11 +15,13 @@ import Data.Either
 import Data.Either.Combinators
 import Data.Functor.Alt
 import Data.List
+import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
 import System.IO
 import Text.XML.Light.Types
 
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Text.XML.Light.Input as XmlInput
@@ -45,6 +47,7 @@ data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML
 data XmlParsingError
   = EmptyDocument
   | MissingAttribute String String (Maybe Line)
+  | NoBuilder (Maybe Line)
   | NoRootElement
   | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
@@ -53,6 +56,8 @@ data XmlParsingError
 
 instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
+  show (NoBuilder line) =
+    giveLineInMsg "Configurations must have at least one builder" line
   show NoRootElement = "Expected exactly one top-level element but found zero"
   show (MissingAttribute elem attr line) =
     giveLineInMsg
@@ -108,9 +113,12 @@ parseBuilder zxml@ZElem {tag, maybeLine}
   | tag == tBuilder = zXMLToBuilder zxml
   | otherwise = failWith (UnexpectedTag [tBuilder] tag maybeLine)
 
-zXMLToBuilders :: ZXML -> XmlValidation [Builder]
+zXMLToBuilders :: ZXML -> XmlValidation (NonEmpty Builder)
 zXMLToBuilders zxml@ZElem {tag, children, maybeLine}
-  | tag == tConfig = traverse parseBuilder children
+  | tag == tConfig =
+      case NE.nonEmpty children of
+        Just builders -> traverse parseBuilder builders
+        Nothing -> failWith (NoBuilder maybeLine)
   | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
 
 fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
@@ -128,21 +136,23 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
   tag = qName elName
   attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
 
-parseXmlString :: String                  -- ^ The XML Content
-               -> XmlValidation [Builder] -- ^ Either an error message, or the builders decoded from XML
+parseXmlString
+  :: String                           -- ^ The XML Content
+  -> XmlValidation (NonEmpty Builder) -- ^ Either an error message, or the builders decoded from XML
 parseXmlString str =
   case XmlInput.parseXMLDoc str of
     Nothing -> failWith NoRootElement
     Just elem -> transform $ Elem elem
   where
-  transform :: Content -> XmlValidation [Builder]
+  transform :: Content -> XmlValidation (NonEmpty Builder)
   transform xml =
     textXMLToZXML xml
       `bindValidation` fromJustZXml
       `bindValidation` zXMLToBuilders
 
-parseXmlFile :: String                       -- ^ A filename
-             -> IO (XmlValidation [Builder]) -- ^ The builders
+parseXmlFile
+  :: String                                -- ^ A filename
+  -> IO (XmlValidation (NonEmpty Builder)) -- ^ The builders
 parseXmlFile filepath = do
     handle :: Handle <- openFile filepath ReadMode
     contents :: String <- hGetContents handle
