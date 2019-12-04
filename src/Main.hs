@@ -24,8 +24,8 @@ renderErrors :: Set.Set ValidationError -> LT.Text
 renderErrors = LT.pack . unlines . map show . Set.toList
 
 data Argument =
-    Help -- ^ Help argument (-h and --help)
-  | File String -- ^ A filename
+    File String -- ^ A filename
+  | Help -- ^ Help argument (-h and --help)
 
 parseArg :: String -> Argument
 parseArg "-h" = Help

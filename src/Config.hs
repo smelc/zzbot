@@ -1,7 +1,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Config where
+module Config (
+  Builder(..)
+  , parseVars
+  , renderAsXml
+  , splitAround
+  , splitDelimiters
+  , Step(..)
+  , Subst
+  , Substable(..)
+  , ValidationError(..)
+) where
 
 import Data.Either
 import Data.List
