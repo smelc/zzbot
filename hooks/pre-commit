@@ -48,3 +48,5 @@ stack test || exit $?
 stack exec hlint . || exit $?
 # Check that zzbot succeeds on a simple configuration
 stack exec zzbot -- configs/config.xml
+# Check that zzbot --print succeeds on a simple configuration
+stack exec zzbot -- --print configs/config.xml
