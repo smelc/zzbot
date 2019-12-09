@@ -1,3 +1,5 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+
 module XmlParseSpec (spec) where
 
 import Config
@@ -64,17 +66,18 @@ expectedResultForBadXml11 =
       ]
 
 validXml =
-  "<config><builder name=\"ls builder\">\
-  \  <shell command=\"ls /\"/>\
+  "<config><builder workdir=\"dir1\" name=\"ls builder\">\
+  \  <shell workdir=\"dir2\" command=\"ls /\"/>\
   \  <setProperty property=\"prop\" value=\"foobar\"/>\
   \</builder></config>"
 expectedResultForValidXml = Success (builder :| [])
  where
   builder =
     Builder
-      { name = "ls builder"
+      { workdir = Just "dir1"
+      , name = "ls builder"
       , steps =
-        [ ShellCmd { cmd = Command "ls" ["/"] }
+        [ ShellCmd { workdir = Just "dir2", cmd = Command "ls" ["/"] }
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }

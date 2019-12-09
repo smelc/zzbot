@@ -64,15 +64,15 @@ testSubstitute =
       substitute ("(", ")") badSubst builder `shouldBe` V.Failure expectedErrors
  where
   builder =
-    Builder "builder"
+    Builder (Just "(a)") "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-      , ShellCmd (Command "ls" ["(a)", "(b)"])
+      , ShellCmd (Just "(b)") (Command "ls" ["(a)", "(b)"])
       ]
   goodSubst = Map.fromList [("a", "xx"), ("b", "yy")]
   expectedSuccess =
-    Builder "builder"
+    Builder (Just "xx") "builder"
       [ SetPropertyFromValue "prop" "fooxxbaryybaz"
-      , ShellCmd (Command "ls" ["xx", "yy"])
+      , ShellCmd (Just "yy") (Command "ls" ["xx", "yy"])
       ]
   badSubst = Map.fromList [("c", "xx")]
   expectedErrors = Set.fromList

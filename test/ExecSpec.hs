@@ -40,10 +40,11 @@ spec =
   where
     testBuilder =
       Builder
+        Nothing
         "test"
-        [ ShellCmd (Command "ls" ["a"])
-        , ShellCmd (Command "ls" ["b"])
-        , ShellCmd (Command "some" ["junk"])
+        [ ShellCmd Nothing (Command "ls" ["a"])
+        , ShellCmd Nothing (Command "ls" ["b"])
+        , ShellCmd Nothing (Command "some" ["junk"])
         ]
     expectedOutput =
       ( ExitFailure 127

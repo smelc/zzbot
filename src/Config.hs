@@ -1,5 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Config (
   Builder(..)
@@ -32,10 +35,10 @@ data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
 
 data Step
     = SetPropertyFromValue { prop :: String, value :: String }
-    | ShellCmd             { cmd :: Command }
+    | ShellCmd             { workdir :: Maybe String, cmd :: Command }
   deriving (Eq, Show)
 
-data Builder = Builder { name :: String, steps :: [Step] }
+data Builder = Builder { workdir :: Maybe String, name :: String, steps :: [Step] }
   deriving (Eq, Show)
 
 data Config = Config { builders :: [Builder], subst :: Subst }
@@ -133,12 +136,18 @@ simpleName name = Name (T.pack name) Nothing Nothing
 (=:) :: String -> String -> Map.Map Name T.Text
 attr =: value = Map.singleton (simpleName attr) (T.pack value)
 
+(=?) :: String -> Maybe String -> Map.Map Name T.Text
+attr =? Nothing = Map.empty
+attr =? Just value = attr =: value
+
 instance ToXml Step where
     toXml (SetPropertyFromValue prop value) = Element "set_property" (prop =: value) []
-    toXml (ShellCmd cmd) = Element "shell" ("command" =: show cmd) []
+    toXml (ShellCmd workdir cmd) =
+      Element "shell" ("command" =: show cmd <> "workdir" =? workdir) []
 
 instance ToXml Builder where
-    toXml (Builder name steps) = Element "builder" Map.empty (map (NodeElement . toXml) steps)
+    toXml (Builder workdir name steps) =
+      Element "builder" ("workdir" =? workdir) (map (NodeElement . toXml) steps)
 
 renderAsXml :: ToXml a => a -> LT.Text
 renderAsXml x = renderText settings doc
@@ -155,8 +164,8 @@ renderAsXml x = renderText settings doc
 -- instance Substable String where
 --    substitute delimiters subst text = applySubstitution delimiters subst text
 
--- Lift substitute to lists
-instance Substable a => Substable [a] where
+-- Lift substitute to traversables
+instance (Traversable t, Substable a) => Substable (t a) where
     substitute delimiters subst = traverse (substitute delimiters subst)
 
 instance Substable Command where
@@ -168,11 +177,14 @@ instance Substable Command where
 instance Substable Step where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
-  substitute delimiters subst (ShellCmd cmds) =
-    ShellCmd <$> substitute delimiters subst cmds
+  substitute delimiters subst (ShellCmd workdir cmd) =
+    ShellCmd
+      <$> traverse (applySubstitution delimiters subst) workdir
+      <*> substitute delimiters subst cmd
 
 instance Substable Builder where
-  substitute delimiters subst (Builder name steps) =
+  substitute delimiters subst (Builder workdir name steps) =
     Builder
-      <$> applySubstitution delimiters subst name
+      <$> traverse (applySubstitution delimiters subst) workdir
+      <*> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps

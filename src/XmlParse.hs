@@ -94,6 +94,9 @@ getAttrValue
   -> XmlValidation String -- ^ An error message or the attribute's value
 getAttrValue zxml attr = parseAttrValue zxml attr pure
 
+lookupAttrValue :: ZXML -> String -> Maybe String
+lookupAttrValue zxml@ZElem {attrs} attr = lookup attr attrs
+
 zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
 zxmlToSetPropertyFromValue zxml = do
   propArg <- getAttrValue zxml "property"
@@ -101,11 +104,13 @@ zxmlToSetPropertyFromValue zxml = do
   return $ SetPropertyFromValue propArg valueArg
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml@ZElem {maybeLine} =
-  parseAttrValue zxml "command" (parseCommand . words)
+zxmlToShellCmd zxml@ZElem {maybeLine} = do
+  let workdir = lookupAttrValue zxml "workdir"
+  cmd <- parseAttrValue zxml "command" (parseCommand . words)
+  return (ShellCmd workdir cmd)
  where
   parseCommand [] = failWith (EmptyCommand maybeLine)
-  parseCommand (filepath:args) = pure (ShellCmd (Command filepath args))
+  parseCommand (filepath:args) = pure (Command filepath args)
 
 parseStep :: ZXML -> XmlValidation Step
 parseStep zxml@ZElem {tag, maybeLine}
@@ -115,9 +120,10 @@ parseStep zxml@ZElem {tag, maybeLine}
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml@ZElem {children} = do
+  let workdir = lookupAttrValue zxml "workdir"
   name <- getAttrValue zxml "name"
   steps <- traverse parseStep children
-  return $ Builder name steps
+  return $ Builder workdir name steps
 
 parseBuilder :: ZXML -> XmlValidation Builder
 parseBuilder zxml@ZElem {tag, maybeLine}

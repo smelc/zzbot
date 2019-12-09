@@ -49,7 +49,7 @@ runSteps :: (Monad m, MonadExec m) => BuildContext -> [Step] -> m ExitCode
 runSteps ctxt [] = return ExitSuccess
 runSteps ctxt (SetPropertyFromValue prop value : steps) =
   runSteps (Map.insert prop value ctxt) steps
-runSteps ctxt (ShellCmd cmd : steps) = do
+runSteps ctxt (ShellCmd _ cmd : steps) = do
   zzLog Green (show cmd)
   (rc, outmsg, errmsg) <- runShellCommand cmd
   unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
@@ -61,4 +61,4 @@ runSteps ctxt (ShellCmd cmd : steps) = do
       return rc
 
 runBuild :: (Monad m, MonadExec m) => Builder -> m ExitCode
-runBuild (Builder _ steps) = runSteps Map.empty steps
+runBuild (Builder _ _ steps) = runSteps Map.empty steps
