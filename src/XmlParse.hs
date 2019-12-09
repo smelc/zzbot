@@ -34,18 +34,24 @@ import Config
 
 tBuilder, tSetProperty, tShell, tConfig :: String
 tBuilder = "builder"
+tEntry = "entry" -- ^ The tag of a single mapping within <subtitution>
 tSetProperty = "setProperty"
 tShell = "shell"
+tSubstitution = "substitution" -- ^ The tag containing entries of the substitution at level 1 (below <config>)
 tConfig = "config"
 
 giveLineInMsg :: String -> Maybe Line -> String
 giveLineInMsg errMsg Nothing = errMsg
 giveLineInMsg errMsg (Just line) = "At line " ++ show line ++ ": " ++ errMsg
 
-data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML], maybeLine :: Maybe Line}
+data ZXML = ZElem {tag :: String,
+                   attrs :: [(String, String)],
+                   children :: [ZXML],
+                   maybeLine :: Maybe Line}
 
 data XmlParsingError
-  = EmptyCommand (Maybe Line)
+  = DuplicateSubstEntries [String] (Maybe Line)
+  | EmptyCommand (Maybe Line)
   | EmptyDocument
   | MissingAttribute String String (Maybe Line)
   | NoBuilder (Maybe Line)
@@ -56,6 +62,7 @@ data XmlParsingError
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
+  show (DuplicateSubstEntries entries line) = giveLineInMsg ("Some substitutions members are mapped more thance once: " ++ intercalate "," entries) line
   show (EmptyCommand line) = giveLineInMsg "Commands cannot be empty" line
   show EmptyDocument = "The document is empty"
   show (NoBuilder line) =
@@ -115,7 +122,7 @@ zxmlToShellCmd zxml@ZElem {maybeLine} = do
 parseStep :: ZXML -> XmlValidation Step
 parseStep zxml@ZElem {tag, maybeLine}
   | tag == tSetProperty = zxmlToSetPropertyFromValue zxml
-  | tag == tShell = zxmlToShellCmd zxml
+  | tag == tShell       = zxmlToShellCmd zxml
   | otherwise = failWith (UnexpectedTag [tSetProperty, tShell] tag maybeLine)
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
@@ -125,16 +132,40 @@ zXMLToBuilder zxml@ZElem {children} = do
   steps <- traverse parseStep children
   return $ Builder workdir name steps
 
-parseBuilder :: ZXML -> XmlValidation Builder
-parseBuilder zxml@ZElem {tag, maybeLine}
-  | tag == tBuilder = zXMLToBuilder zxml
-  | otherwise = failWith (UnexpectedTag [tBuilder] tag maybeLine)
+zXMLToSubst :: ZXML -> XmlValidation Subst
+zXMLToSubst zxml@ZElem {children, maybeLine} = do
+  entries :: [(String, String)] <- traverse zXMLToEntry children
+  let ds = doublons (map fst entries) []
+  case ds of
+   probs -> failWith (DuplicateSubstEntries probs maybeLine)
+   []    -> return $ Map.fromList entries
+  where zXMLToEntry :: ZXML -> XmlValidation (String, String)
+        zXMLToEntry zxml = do
+          name <- getAttrValue zxml "name"
+          value <- getAttrValue zxml "value"
+          return (name, value)
+        doublons :: Eq a => [a] -- ^ The list to look for doublons in
+                         -> [a] -- ^ Elements already seen
+                         -> [a]
+        doublons [] _ = []
+        doublons (hd:tl) seen
+          | hd `elem` seen = hd:doublons tl seen
+          | otherwise      = doublons tl (hd:seen)
+
+parseLevel1 :: ZXML -> XmlValidation (Either Subst Builder)
+-- ^ Parse the content below <config> i.e. right below the top level element
+parseLevel1 zxml@ZElem {tag, maybeLine}
+  | tag == tBuilder      = Right <$> zXMLToBuilder zxml
+  | tag == tSubstitution = Left <$> zXMLToSubst zxml
+  | otherwise = failWith (UnexpectedTag [tBuilder, tSubstitution] tag maybeLine)
 
 zXMLToBuilders :: ZXML -> XmlValidation (NonEmpty Builder)
 zXMLToBuilders zxml@ZElem {tag, children, maybeLine}
   | tag == tConfig =
       case NE.nonEmpty children of
-        Just builders -> traverse parseBuilder builders
+        Just level1 -> 
+          undefined
+          where raw :: XmlValidation (NonEmpty (Either Subst Builder)) = traverse parseLevel1 level1
         Nothing -> failWith (NoBuilder maybeLine)
   | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
 

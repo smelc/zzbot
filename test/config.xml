@@ -1,4 +1,8 @@
 <config>
+  <substitution>
+    <entry name="dir" value="/"/>
+    <entry name="cmd" value="ls"/>
+  </substitution>
   <builder name="ls builder">
     <shell command="ls /"/>
     <shell workdir="/etc" command="pwd"/>
