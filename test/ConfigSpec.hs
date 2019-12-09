@@ -66,13 +66,13 @@ testSubstitute =
   builder =
     Builder "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-      , ShellCmd ["ls", "(a)", "(b)"]
+      , ShellCmd (Command "ls" ["(a)", "(b)"])
       ]
   goodSubst = Map.fromList [("a", "xx"), ("b", "yy")]
   expectedSuccess =
     Builder "builder"
       [ SetPropertyFromValue "prop" "fooxxbaryybaz"
-      , ShellCmd ["ls", "xx", "yy"]
+      , ShellCmd (Command "ls" ["xx", "yy"])
       ]
   badSubst = Map.fromList [("c", "xx")]
   expectedErrors = Set.fromList

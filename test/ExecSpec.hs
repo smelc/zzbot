@@ -25,8 +25,8 @@ instance MonadExec MockExec where
 
   zzLog color entry = tell [Message color entry]
 
-  runShellCommand ["ls", "a"] = return (ExitSuccess, "foo bar", "")
-  runShellCommand ["ls", "b"] = return (ExitSuccess, "bar baz", "")
+  runShellCommand (Command "ls" ["a"]) = return (ExitSuccess, "foo bar", "")
+  runShellCommand (Command "ls" ["b"]) = return (ExitSuccess, "bar baz", "")
   runShellCommand _ = return (ExitFailure 127, "", "command not found")
 
   putOutLn str = tell [StdOut str]
@@ -41,9 +41,9 @@ spec =
     testBuilder =
       Builder
         "test"
-        [ ShellCmd ["ls", "a"]
-        , ShellCmd ["ls", "b"]
-        , ShellCmd ["some", "junk"]
+        [ ShellCmd (Command "ls" ["a"])
+        , ShellCmd (Command "ls" ["b"])
+        , ShellCmd (Command "some" ["junk"])
         ]
     expectedOutput =
       ( ExitFailure 127

@@ -47,6 +47,22 @@ expectedResultForBadXml9 = failWith (UnexpectedText (Just 1))
 badXml10 = "<config></config>"
 expectedResultForBadXml10 = failWith (NoBuilder (Just 1))
 
+badXml11 =
+  "<config>\n\
+  \  <builder name=\"foo\">\n\
+  \    <shell command=\"\"/>\n\
+  \    <shell command=\" \"/>\n\
+  \    <shell command=\"  \"/>\n\
+  \  </builder>\n\
+  \</config>"
+expectedResultForBadXml11 =
+  Failure $
+    Set.fromList
+      [ EmptyCommand (Just 3)
+      , EmptyCommand (Just 4)
+      , EmptyCommand (Just 5)
+      ]
+
 validXml =
   "<config><builder name=\"ls builder\">\
   \  <shell command=\"ls /\"/>\
@@ -58,7 +74,7 @@ expectedResultForValidXml = Success (builder :| [])
     Builder
       { name = "ls builder"
       , steps =
-        [ ShellCmd { cmd = ["ls", "/"] }
+        [ ShellCmd { cmd = Command "ls" ["/"] }
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }
@@ -88,4 +104,6 @@ spec =
       parseXmlString badXml9 `shouldBe` expectedResultForBadXml9
     it "should fail on configs with no builder" $
       parseXmlString badXml10 `shouldBe` expectedResultForBadXml10
+    it "should fail on empty shell commands" $
+      parseXmlString badXml11 `shouldBe` expectedResultForBadXml11
 

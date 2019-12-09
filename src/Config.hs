@@ -3,6 +3,7 @@
 
 module Config (
   Builder(..)
+  , Command(..)
   , parseVars
   , renderAsXml
   , splitAround
@@ -26,9 +27,12 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 
 -- AST
-data Step =
-      SetPropertyFromValue { prop :: String, value :: String }
-    | ShellCmd             { cmd :: [String] }
+data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
+  deriving (Eq)
+
+data Step
+    = SetPropertyFromValue { prop :: String, value :: String }
+    | ShellCmd             { cmd :: Command }
   deriving (Eq, Show)
 
 data Builder = Builder { name :: String, steps :: [Step] }
@@ -36,6 +40,10 @@ data Builder = Builder { name :: String, steps :: [Step] }
 
 data Config = Config { builders :: [Builder], subst :: Subst }
   deriving (Eq, Show)
+
+instance Show Command where
+  show (Command cmd []) = cmd
+  show (Command cmd args) = cmd ++ " " ++ unwords args
 
 -- types
 type Subst = Map.Map String String
@@ -127,7 +135,7 @@ attr =: value = Map.singleton (simpleName attr) (T.pack value)
 
 instance ToXml Step where
     toXml (SetPropertyFromValue prop value) = Element "set_property" (prop =: value) []
-    toXml (ShellCmd cmdList) = Element "shell" ("command" =: unwords cmdList) []
+    toXml (ShellCmd cmd) = Element "shell" ("command" =: show cmd) []
 
 instance ToXml Builder where
     toXml (Builder name steps) = Element "builder" Map.empty (map (NodeElement . toXml) steps)
@@ -151,11 +159,17 @@ renderAsXml x = renderText settings doc
 instance Substable a => Substable [a] where
     substitute delimiters subst = traverse (substitute delimiters subst)
 
+instance Substable Command where
+  substitute delimiters subst (Command cmd args) =
+    Command
+      <$> applySubstitution delimiters subst cmd
+      <*> traverse (applySubstitution delimiters subst) args
+
 instance Substable Step where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
   substitute delimiters subst (ShellCmd cmds) =
-    ShellCmd <$> traverse (applySubstitution delimiters subst) cmds
+    ShellCmd <$> substitute delimiters subst cmds
 
 instance Substable Builder where
   substitute delimiters subst (Builder name steps) =

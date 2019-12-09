@@ -45,7 +45,8 @@ giveLineInMsg errMsg (Just line) = "At line " ++ show line ++ ": " ++ errMsg
 data ZXML = ZElem {tag :: String, attrs :: [(String, String)], children :: [ZXML], maybeLine :: Maybe Line}
 
 data XmlParsingError
-  = EmptyDocument
+  = EmptyCommand (Maybe Line)
+  | EmptyDocument
   | MissingAttribute String String (Maybe Line)
   | NoBuilder (Maybe Line)
   | NoRootElement
@@ -55,6 +56,7 @@ data XmlParsingError
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
+  show (EmptyCommand line) = giveLineInMsg "Commands cannot be empty" line
   show EmptyDocument = "The document is empty"
   show (NoBuilder line) =
     giveLineInMsg "Configurations must have at least one builder" line
@@ -76,14 +78,21 @@ type XmlValidation = Validation XmlParsingErrors
 failWith :: XmlParsingError -> XmlValidation a
 failWith error = Failure (Set.singleton error)
 
+parseAttrValue
+  :: ZXML -- ^ The element in which the attribute is being searched
+  -> String -- ^ The name of the attribute to look up
+  -> (String -> XmlValidation a) -- ^ A parser of values
+  -> XmlValidation a -- ^ An error message or the attribute's value
+parseAttrValue zxml@ZElem {tag, attrs, maybeLine} attr parse =
+  case lookup attr attrs of
+    Just value -> parse value
+    Nothing -> failWith (MissingAttribute tag attr maybeLine)
+
 getAttrValue
   :: ZXML -- ^ The element in which the attribute is being searched
   -> String -- ^ The name of the attribute to look up
   -> XmlValidation String -- ^ An error message or the attribute's value
-getAttrValue zxml@ZElem {tag, attrs, maybeLine} attr =
-  case lookup attr attrs of
-    Just value -> Success value
-    Nothing -> failWith (MissingAttribute tag attr maybeLine)
+getAttrValue zxml attr = parseAttrValue zxml attr pure
 
 zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
 zxmlToSetPropertyFromValue zxml = do
@@ -92,9 +101,11 @@ zxmlToSetPropertyFromValue zxml = do
   return $ SetPropertyFromValue propArg valueArg
 
 zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml = do
-  cmdArg <- words <$> getAttrValue zxml "command"
-  return $ ShellCmd cmdArg
+zxmlToShellCmd zxml@ZElem {maybeLine} =
+  parseAttrValue zxml "command" (parseCommand . words)
+ where
+  parseCommand [] = failWith (EmptyCommand maybeLine)
+  parseCommand (filepath:args) = pure (ShellCmd (Command filepath args))
 
 parseStep :: ZXML -> XmlValidation Step
 parseStep zxml@ZElem {tag, maybeLine}
