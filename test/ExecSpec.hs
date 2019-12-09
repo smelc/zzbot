@@ -36,7 +36,7 @@ instance MonadExec LoggingMockExec where
   putErrLn str = tell [StdErr str]
 
 
--- Logging mock exec
+-- Tracing mock exec
 
 data Execution = Execution (Maybe String) Command
   deriving (Eq, Show)
