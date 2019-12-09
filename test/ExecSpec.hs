@@ -9,41 +9,67 @@ import Exec
 import System.Exit
 import Test.Hspec
 
+-- Logging mock exec
+
 data LogEntry
   = Message Color String
   | StdOut String
   | StdErr String
   deriving (Eq, Show)
 
-newtype MockExec a = MockExec (Writer [LogEntry] a)
+newtype LoggingMockExec a = LoggingMockExec (Writer [LogEntry] a)
   deriving (Functor, Applicative, Monad, MonadWriter [LogEntry])
 
-runMockExec :: MockExec a -> (a, [LogEntry])
-runMockExec (MockExec m) = runWriter m
+runLoggingMockExec :: LoggingMockExec a -> (a, [LogEntry])
+runLoggingMockExec (LoggingMockExec m) = runWriter m
 
-instance MonadExec MockExec where
+instance MonadExec LoggingMockExec where
 
   zzLog color entry = tell [Message color entry]
 
-  runShellCommand (Command "ls" ["a"]) = return (ExitSuccess, "foo bar", "")
-  runShellCommand (Command "ls" ["b"]) = return (ExitSuccess, "bar baz", "")
-  runShellCommand _ = return (ExitFailure 127, "", "command not found")
+  runShellCommand _ (Command "ls" ["a"]) = return (ExitSuccess, "foo bar", "")
+  runShellCommand _ (Command "ls" ["b"]) = return (ExitSuccess, "bar baz", "")
+  runShellCommand _ _ = return (ExitFailure 127, "", "command not found")
 
   putOutLn str = tell [StdOut str]
 
   putErrLn str = tell [StdErr str]
 
+
+-- Logging mock exec
+
+data Execution = Execution (Maybe String) Command
+  deriving (Eq, Show)
+
+newtype TracingMockExec a = TracingMockExec (Writer [Execution] a)
+  deriving (Functor, Applicative, Monad, MonadWriter [Execution])
+
+runTracingMockExec :: TracingMockExec a -> (a, [Execution])
+runTracingMockExec (TracingMockExec m) = runWriter m
+
+instance MonadExec TracingMockExec where
+  zzLog color entry = return ()
+  runShellCommand workdir command = do
+    tell [Execution workdir command]
+    return (ExitSuccess, "", "")
+  putOutLn str = return ()
+  putErrLn str = return ()
+
+-- Tests
+
 spec =
-  describe "runBuild" $
+  describe "runBuild" $ do
     it "should log what it's doing" $
-      runMockExec (runBuild testBuilder) `shouldBe` expectedOutput
+      runLoggingMockExec (runBuild testBuilder) `shouldBe` expectedOutput
+    it "should set the working directory as specified" $
+      runTracingMockExec (runBuild testBuilder) `shouldBe` expectedTrace
   where
     testBuilder =
       Builder
-        Nothing
+        (Just "dir1")
         "test"
         [ ShellCmd Nothing (Command "ls" ["a"])
-        , ShellCmd Nothing (Command "ls" ["b"])
+        , ShellCmd (Just "dir2") (Command "ls" ["b"])
         , ShellCmd Nothing (Command "some" ["junk"])
         ]
     expectedOutput =
@@ -55,5 +81,12 @@ spec =
         , Message Green "some junk"
         , StdErr "command not found"
         , Message Red "some junk failed: ExitFailure 127"
+        ]
+      )
+    expectedTrace =
+      (ExitSuccess
+      , [ Execution (Just "dir1") (Command "ls" ["a"])
+        , Execution (Just "dir2") (Command "ls" ["b"])
+        , Execution (Just "dir1") (Command "some" ["junk"])
         ]
       )

@@ -1,6 +1,7 @@
 <config>
   <builder name="ls builder">
     <shell command="ls /"/>
+    <shell workdir="/etc" command="pwd"/>
     <setProperty property="prop" value="foobar"/>
   </builder>
 </config>

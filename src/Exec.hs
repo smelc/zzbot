@@ -8,6 +8,7 @@ module Exec (
   , runBuild
  ) where
 
+import Control.Applicative
 import Control.Monad
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text.Prettyprint.Doc
@@ -27,8 +28,10 @@ type BuildContext = Map.Map String String
 
 class MonadExec m where
   zzLog :: Color -> String -> m ()
-  -- return code, stdout, stderr
-  runShellCommand :: Command -> m (ExitCode, String, String)
+  runShellCommand
+    :: Maybe String -- ^ Optional path to the working directory
+    -> Command -- ^ The command to execute
+    -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
   putOutLn :: String -> m ()
   putErrLn :: String -> m ()
 
@@ -38,27 +41,37 @@ instance MonadExec IO where
     doc = "ZZ>" <+> pretty logEntry <> hardline
     style = color textColor
 
-  runShellCommand Command{cmdFilename, cmdArgs} =
-    readProcessWithExitCode cmdFilename cmdArgs ""
+  runShellCommand workdir Command{cmdFilename, cmdArgs} =
+    readCreateProcessWithExitCode createProcess ""
+   where
+    createProcess = (proc cmdFilename cmdArgs) { cwd = workdir }
 
   putOutLn = putStrLn
 
   putErrLn = hPutStrLn stderr
 
-runSteps :: (Monad m, MonadExec m) => BuildContext -> [Step] -> m ExitCode
-runSteps ctxt [] = return ExitSuccess
-runSteps ctxt (SetPropertyFromValue prop value : steps) =
-  runSteps (Map.insert prop value ctxt) steps
-runSteps ctxt (ShellCmd _ cmd : steps) = do
+runSteps
+  :: (Monad m, MonadExec m)
+  => Maybe String
+  -> BuildContext
+  -> [Step]
+  -> m ExitCode
+runSteps _ ctxt [] = return ExitSuccess
+runSteps builderWorkdir ctxt (SetPropertyFromValue prop value : steps) =
+  runSteps builderWorkdir (Map.insert prop value ctxt) steps
+runSteps builderWorkdir ctxt (ShellCmd workdir cmd : steps) = do
   zzLog Green (show cmd)
-  (rc, outmsg, errmsg) <- runShellCommand cmd
+  (rc, outmsg, errmsg) <- runShellCommand (workdir <|> builderWorkdir) cmd
   unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
   unless (null errmsg) $ putErrLn errmsg -- show step error output, if any
   case rc of
-    ExitSuccess -> runSteps ctxt steps -- step succeeded, continue execution
-    _           -> do                  -- step failed, stop execution
+    ExitSuccess ->
+      -- step succeeded, continue execution
+      runSteps builderWorkdir ctxt steps
+    _ -> do
+      -- step failed, stop execution
       zzLog Red (show cmd ++ " failed: " ++ show rc)
       return rc
 
 runBuild :: (Monad m, MonadExec m) => Builder -> m ExitCode
-runBuild (Builder _ _ steps) = runSteps Map.empty steps
+runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
