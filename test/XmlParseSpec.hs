@@ -88,15 +88,15 @@ expectedResultForValidXml = Success config
 
 spec :: SpecWith ()
 spec = do
-  describe "doublons" $
-    it "doublons . doublons = [] (doublons doesn't returns doublons)" $ property $
-      \(x :: [Int]) -> doublons (doublons x) `shouldBe` []
-  describe "doublons" $
-    it "doublons example 0" $
-      doublons [0, 0] `shouldBe` [0]
-  describe "doublons" $
-    it "doublons example 1" $
-      doublons [0, 1] `shouldBe` []
+  describe "duplicates" $ do
+    it "duplicates . duplicates = [] (duplicates doesn't returns duplicates)" $ property $
+      \(x :: [Int]) -> duplicates (duplicates x) `shouldBe` []
+    it "duplicates [0, 0] should be [0]" $
+      duplicates [0, 0] `shouldBe` [0]
+    it "duplicates [0, 0, 0] should be [0]" $
+      duplicates [0, 0] `shouldBe` [0]
+    it "duplicates [0, 1] should be []" $
+      duplicates [0, 1] `shouldBe` []
   describe "parseXmlString" $ do
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml

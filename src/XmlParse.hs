@@ -3,7 +3,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 
 module XmlParse (
-  doublons
+  duplicates
   , failWith
   , parseXmlFile
   , parseXmlString
@@ -133,15 +133,14 @@ zXMLToBuilder zxml@ZElem {children} = do
   steps <- traverse parseStep children
   return $ Builder workdir name steps
 
-doublons :: Eq a => [a] -- ^ The list to look for doublons in
-                 -> [a]
-doublons elems = doublons0 elems []
-  where doublons0 [] _ = []
-        doublons0 (hd:tl) seen
-          | hd `elem` seen = let rest = doublons0 tl seen
-                             in if hd `elem` rest then rest
-                                else hd:rest
-          | otherwise      = doublons0 tl (hd:seen)
+duplicates
+  :: (Eq a, Ord a)
+  => [a] -- ^ The list to look for duplicates in
+  -> [a]
+duplicates elems = Map.keys (Map.filter (>1) counts)
+ where
+  counts = Map.unionsWith (+) (map singleton elems)
+  singleton elem = Map.singleton elem 1
 
 zXMLToSubst :: ZXML -> XmlValidation Subst
 zXMLToSubst zxml@ZElem {children, maybeLine} =
@@ -149,7 +148,7 @@ zXMLToSubst zxml@ZElem {children, maybeLine} =
       case ventries of
         Failure err -> Failure err
         Success entries ->
-          let ds = doublons $ map fst entries in
+          let ds = duplicates $ map fst entries in
           case ds of
             []    -> Success entries
             probs -> failWith (DuplicateSubstEntries probs maybeLine)
@@ -174,9 +173,9 @@ zXMLToConfig zxml@ZElem {tag, children, maybeLine}
         Nothing -> failWith (NoBuilder maybeLine)
   | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
   where helper :: [Either Subst Builder] -> XmlValidation Config
-        helper es = 
+        helper es =
           let (substs, builders) = partitionEithers es
-          in case builders of 
+          in case builders of
                [] -> failWith (NoBuilder maybeLine)
                (hd:tl) -> Success $ Config (hd NE.:| tl) (concat substs)
 
