@@ -46,6 +46,8 @@ stack build || exit $?
 stack test || exit $?
 # Check that hints are applied
 stack exec hlint . || exit $?
+# Generate documentation from sources
+stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?
 # Check that zzbot succeeds on a simple configuration
 stack exec zzbot -- configs/config.xml
 # Check that zzbot --print succeeds on a simple configuration

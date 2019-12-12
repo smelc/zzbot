@@ -35,10 +35,10 @@ import Config
 
 tBuilder, tSetProperty, tShell, tConfig :: String
 tBuilder = "builder"
-tEntry = "entry" -- ^ The tag of a single mapping within <subtitution>
+tEntry = "entry"
 tSetProperty = "setProperty"
 tShell = "shell"
-tSubstitution = "substitution" -- ^ The tag containing entries of the substitution at level 1 (below <config>)
+tSubstitution = "substitution"
 tConfig = "config"
 
 giveLineInMsg :: String -> Maybe Line -> String
