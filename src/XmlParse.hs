@@ -3,7 +3,8 @@
 {-# LANGUAGE ApplicativeDo #-}
 
 module XmlParse (
-  failWith
+  doublons
+  , failWith
   , parseXmlFile
   , parseXmlString
   , XmlParsingError(..)
@@ -132,25 +133,31 @@ zXMLToBuilder zxml@ZElem {children} = do
   steps <- traverse parseStep children
   return $ Builder workdir name steps
 
+doublons :: Eq a => [a] -- ^ The list to look for doublons in
+                 -> [a]
+doublons elems = doublons0 elems []
+  where doublons0 [] _ = []
+        doublons0 (hd:tl) seen
+          | hd `elem` seen = let rest = doublons0 tl seen
+                             in if hd `elem` rest then rest
+                                else hd:rest
+          | otherwise      = doublons0 tl (hd:seen)
+
 zXMLToSubst :: ZXML -> XmlValidation Subst
-zXMLToSubst zxml@ZElem {children, maybeLine} = do
-  entries :: [(String, String)] <- traverse zXMLToEntry children
-  let ds = doublons (map fst entries) []
-  case ds of
-   probs -> failWith (DuplicateSubstEntries probs maybeLine)
-   []    -> return $ Map.fromList entries
-  where zXMLToEntry :: ZXML -> XmlValidation (String, String)
-        zXMLToEntry zxml = do
-          name <- getAttrValue zxml "name"
-          value <- getAttrValue zxml "value"
-          return (name, value)
-        doublons :: Eq a => [a] -- ^ The list to look for doublons in
-                         -> [a] -- ^ Elements already seen
-                         -> [a]
-        doublons [] _ = []
-        doublons (hd:tl) seen
-          | hd `elem` seen = hd:doublons tl seen
-          | otherwise      = doublons tl (hd:seen)
+zXMLToSubst zxml@ZElem {children, maybeLine} =
+  let ventries :: XmlValidation [(String, String)] = traverse zXMLToEntry children in
+      case ventries of
+        Failure err -> Failure err
+        Success entries ->
+          let ds = doublons $ map fst entries in
+          case ds of
+            []    -> Success entries
+            probs -> failWith (DuplicateSubstEntries probs maybeLine)
+        where zXMLToEntry :: ZXML -> XmlValidation (String, String)
+              zXMLToEntry zxml = do
+                name <- getAttrValue zxml "name"
+                value <- getAttrValue zxml "value"
+                return (name, value)
 
 parseLevel1 :: ZXML -> XmlValidation (Either Subst Builder)
 -- ^ Parse the content below <config> i.e. right below the top level element
@@ -159,15 +166,19 @@ parseLevel1 zxml@ZElem {tag, maybeLine}
   | tag == tSubstitution = Left <$> zXMLToSubst zxml
   | otherwise = failWith (UnexpectedTag [tBuilder, tSubstitution] tag maybeLine)
 
-zXMLToBuilders :: ZXML -> XmlValidation (NonEmpty Builder)
-zXMLToBuilders zxml@ZElem {tag, children, maybeLine}
+zXMLToConfig :: ZXML -> XmlValidation Config
+zXMLToConfig zxml@ZElem {tag, children, maybeLine}
   | tag == tConfig =
       case NE.nonEmpty children of
-        Just level1 -> 
-          undefined
-          where raw :: XmlValidation (NonEmpty (Either Subst Builder)) = traverse parseLevel1 level1
+        Just level1 -> traverse parseLevel1 level1 `bindValidation` (helper . NE.toList)
         Nothing -> failWith (NoBuilder maybeLine)
   | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
+  where helper :: [Either Subst Builder] -> XmlValidation Config
+        helper es = 
+          let (substs, builders) = partitionEithers es
+          in case builders of 
+               [] -> failWith (NoBuilder maybeLine)
+               (hd:tl) -> Success $ Config (hd NE.:| tl) (concat substs)
 
 fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
 fromJustZXml = maybe (failWith EmptyDocument) pure
@@ -185,22 +196,22 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
   attrs = [(qName attrKey, attrVal) | Attr {attrKey, attrVal} <- elAttribs]
 
 parseXmlString
-  :: String                           -- ^ The XML Content
-  -> XmlValidation (NonEmpty Builder) -- ^ Either an error message, or the builders decoded from XML
+  :: String               -- ^ The XML Content
+  -> XmlValidation Config -- ^ Either an error message, or the builders decoded from XML
 parseXmlString str =
   case XmlInput.parseXMLDoc str of
     Nothing -> failWith NoRootElement
     Just elem -> transform $ Elem elem
   where
-  transform :: Content -> XmlValidation (NonEmpty Builder)
+  transform :: Content -> XmlValidation Config
   transform xml =
     textXMLToZXML xml
       `bindValidation` fromJustZXml
-      `bindValidation` zXMLToBuilders
+      `bindValidation` zXMLToConfig
 
 parseXmlFile
-  :: String                                -- ^ A filename
-  -> IO (XmlValidation (NonEmpty Builder)) -- ^ The builders
+  :: String                    -- ^ A filename
+  -> IO (XmlValidation Config) -- ^ The builders
 parseXmlFile filepath = do
     handle :: Handle <- openFile filepath ReadMode
     contents :: String <- hGetContents handle

@@ -23,12 +23,12 @@ process :: Bool -- ^ Whether to print (True) or execute the builder (False)
         -> String -- ^ The file containing the builder's description
         -> IO ExitCode
 process printOrExec filepath  = do
-  mbuilders :: XmlValidation (NonEmpty Builder) <- parseXmlFile filepath
-  case mbuilders of
+  mconfig :: XmlValidation Config <- parseXmlFile filepath
+  case mconfig of
       Failure (err :: Set.Set XmlParsingError) -> do
         putStrLn $ unlines $ map show $ Set.toList err
         return (ExitFailure 1)
-      Success (builders :: NonEmpty Builder) ->
+      Success Config{subst, builders} ->
         if printOrExec
         then do
           let btexts :: NonEmpty LT.Text = NE.map renderAsXml builders

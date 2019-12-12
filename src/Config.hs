@@ -5,6 +5,7 @@
 
 module Config (
   Builder(..)
+  , Config(..)
   , Command(..)
   , parseVars
   , renderAsXml
@@ -18,6 +19,7 @@ module Config (
 
 import Data.Either
 import Data.List
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe
 import Data.Validation
 import Text.Printf
@@ -40,7 +42,7 @@ data Step
 data Builder = Builder { workdir :: Maybe String, name :: String, steps :: [Step] }
   deriving (Eq, Show)
 
-data Config = Config { builders :: [Builder], subst :: Subst }
+data Config = Config { builders :: NonEmpty Builder, subst :: Subst }
   deriving (Eq, Show)
 
 instance Show Command where
@@ -48,7 +50,7 @@ instance Show Command where
   show (Command cmd args) = cmd ++ " " ++ unwords args
 
 -- types
-type Subst = Map.Map String String
+type Subst = [(String,String)]
 
 data ValidationError = KeyNotFound Subst String
   deriving (Eq, Ord)
@@ -56,8 +58,7 @@ data ValidationError = KeyNotFound Subst String
 instance Show ValidationError where
   show (KeyNotFound subst key) =
     printf "key not mapped by substitution: %s. Substitution's domain is: %s" key domain
-   where
-    domain = unwords (Map.keys subst)
+   where domain = unwords (map fst subst)
 
 class Substable a where
     -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
@@ -103,12 +104,11 @@ parseVars delimiters text =
 validateVars :: (String, String) -- ^ The pair of opening and closing delimiters
              -> Subst            -- ^ The substitution
              -> String           -- ^ The text to substitute
-             -> [ValidationError]         -- ^ A list of errors
+             -> [ValidationError] -- ^ A list of errors
 validateVars delimiters subst text =
     map (KeyNotFound subst) missingVars
     where allVars = rights (parseVars delimiters text)
-          missingVars = filter (`Map.notMember` subst) allVars
-          domain = unwords $ Map.keys subst
+          missingVars = filter (`notElem` map fst subst) allVars
 
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
@@ -119,8 +119,9 @@ applySubstitution delimiters subst text =
       else Success (concatMap substApplier pieces)
     where errors :: [ValidationError] = validateVars delimiters subst text
           pieces :: [Either String VarName] = parseVars delimiters text
+          substApplier :: Either String VarName -> String
           substApplier (Left text) = text
-          substApplier (Right varName) = subst Map.! varName
+          substApplier (Right varName) = fromJust $ lookup varName subst
 
 ---------
 -- XML --

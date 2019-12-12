@@ -1,4 +1,5 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module XmlParseSpec (spec) where
 
@@ -8,11 +9,13 @@ import Data.Validation
 import XmlParse
 import System.Exit
 import Test.Hspec
+import Test.QuickCheck hiding (Failure, Success)
 
 import qualified Data.Set as Set
+import qualified Test.Hspec.QuickCheck as QuickCheck
 
 badXml1 = "<config><foobar></foobar></config>"
-expectedResultForBadXml1 = failWith (UnexpectedTag ["builder"] "foobar" (Just 1))
+expectedResultForBadXml1 = failWith (UnexpectedTag ["builder", "substitution"] "foobar" (Just 1))
 
 badXml2 = "<config><builder></builder></config>"
 expectedResultForBadXml2 = failWith (MissingAttribute "builder" "name" (Just 1))
@@ -70,7 +73,7 @@ validXml =
   \  <shell workdir=\"dir2\" command=\"ls /\"/>\
   \  <setProperty property=\"prop\" value=\"foobar\"/>\
   \</builder></config>"
-expectedResultForValidXml = Success (builder :| [])
+expectedResultForValidXml = Success config
  where
   builder =
     Builder
@@ -81,9 +84,19 @@ expectedResultForValidXml = Success (builder :| [])
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }
+  config = Config (builder :| []) []
 
 spec :: SpecWith ()
-spec =
+spec = do
+  describe "doublons" $
+    it "doublons . doublons = [] (doublons doesn't returns doublons)" $ property $
+      \(x :: [Int]) -> doublons (doublons x) `shouldBe` []
+  describe "doublons" $
+    it "doublons example 0" $
+      doublons [0, 0] `shouldBe` [0]
+  describe "doublons" $
+    it "doublons example 1" $
+      doublons [0, 1] `shouldBe` []
   describe "parseXmlString" $ do
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml
