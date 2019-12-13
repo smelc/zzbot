@@ -186,7 +186,7 @@ sortConfigChildren = foldMap inject
 zXMLToConfig :: ZXML -> XmlValidation Config
 zXMLToConfig zxml@ZElem {tag, children, maybeLine}
   | tag == tConfig = do
-      traverse unknownTag otherXmls
+      traverse_ unknownTag otherXmls
       builders <- zXMLsToBuilders maybeLine builderXmls
       substs <- traverse zXMLToSubst substXmls
       return $ Config builders (concat substs)
