@@ -14,7 +14,6 @@ module XmlParse (
 import Data.Char
 import Data.Either
 import Data.Either.Combinators
-import Data.Functor.Alt
 import Data.List
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
