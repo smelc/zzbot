@@ -124,7 +124,7 @@ expectedResultForValidXml = Success config
   config = Config (builder :| []) subst
 
 spec :: SpecWith ()
-spec = do
+spec =
   describe "parseXmlString" $ do
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml
