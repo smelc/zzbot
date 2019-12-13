@@ -19,12 +19,12 @@ module Config (
 
 import Data.Either
 import Data.List
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe
 import Data.Validation
 import Text.Printf
 import Text.XML
 
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -42,7 +42,7 @@ data Step
 data Builder = Builder { workdir :: Maybe String, name :: String, steps :: [Step] }
   deriving (Eq, Show)
 
-data Config = Config { builders :: NonEmpty Builder, subst :: Subst }
+data Config = Config { builders :: NE.NonEmpty Builder, subst :: Subst }
   deriving (Eq, Show)
 
 instance Show Command where
@@ -148,6 +148,20 @@ instance ToXml Step where
 instance ToXml Builder where
     toXml (Builder workdir name steps) =
       Element "builder" ("workdir" =? workdir) (map (NodeElement . toXml) steps)
+
+instance ToXml Subst where
+    toXml subst =
+      Element "substitution" Map.empty  (map (NodeElement . entryToXml) subst)
+      where entryToXml :: (String, String) -> Element
+            entryToXml (name, value) = Element "entry" (Map.fromList
+                                                  [(simpleName "name", T.pack name),
+                                                   (simpleName "value", T.pack value)])
+                                               []
+
+instance ToXml Config where
+  toXml (Config builders subst) =
+      Element "config" Map.empty (substNode : NE.toList (NE.map (NodeElement . toXml) builders))
+      where substNode :: Node = (NodeElement . toXml) subst
 
 renderAsXml :: ToXml a => a -> LT.Text
 renderAsXml x = renderText settings doc

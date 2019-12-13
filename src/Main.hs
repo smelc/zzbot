@@ -28,11 +28,10 @@ process printOrExec filepath  = do
       Failure (err :: Set.Set XmlParsingError) -> do
         putStrLn $ unlines $ map show $ Set.toList err
         return (ExitFailure 1)
-      Success Config{subst, builders} ->
+      Success config@Config{subst, builders} ->
         if printOrExec
         then do
-          let btexts :: NonEmpty LT.Text = NE.map renderAsXml builders
-          LT.putStrLn $ LT.unlines $ NE.toList btexts
+          LT.putStrLn $ renderAsXml config
           return ExitSuccess
         else andExitCodes <$> traverse runBuild builders
 
