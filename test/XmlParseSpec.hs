@@ -14,7 +14,7 @@ import Test.QuickCheck hiding (Failure, Success)
 import qualified Data.Set as Set
 import qualified Test.Hspec.QuickCheck as QuickCheck
 
-badXml1 = "<config><foobar></foobar></config>"
+badXml1 = "<config><builder name=\"foo\"/><foobar></foobar></config>"
 expectedResultForBadXml1 = failWith (UnexpectedTag ["builder", "substitution"] "foobar" (Just 1))
 
 badXml2 = "<config><builder></builder></config>"
@@ -68,11 +68,47 @@ expectedResultForBadXml11 =
       , EmptyCommand (Just 5)
       ]
 
+badXml12 = "<config><substitution><entry/></substitution></config>"
+expectedResultForBadXml12 =
+  Failure $
+    Set.fromList
+      [ NoBuilder (Just 1)
+      , MissingAttribute "entry" "name" (Just 1)
+      , MissingAttribute "entry" "value" (Just 1)
+      ]
+
+badXml13 =
+  "<config>\
+  \  <builder name=\"foo\"/>\
+  \  <substitution>\
+  \    <entry name=\"aa\"/>\
+  \  </substitution>\
+  \</config>"
+expectedResultForBadXml13 =
+  failWith (MissingAttribute "entry" "value" (Just 1))
+
+badXml14 =
+  "<config>\
+  \  <builder name=\"foo\"/>\
+  \  <substitution>\
+  \    <entry value=\"11\"/>\
+  \  </substitution>\
+  \</config>"
+expectedResultForBadXml14 =
+  failWith (MissingAttribute "entry" "name" (Just 1))
+
 validXml =
-  "<config><builder workdir=\"dir1\" name=\"ls builder\">\
-  \  <shell workdir=\"dir2\" command=\"ls /\"/>\
-  \  <setProperty property=\"prop\" value=\"foobar\"/>\
-  \</builder></config>"
+  "<config>\
+  \  <substitution>\
+  \    <entry name=\"aa\" value=\"11\"/>\
+  \    <entry name=\"aa\" value=\"11\"/>\
+  \    <entry name=\"bb\" value=\"22\"/>\
+  \  </substitution>\
+  \  <builder workdir=\"dir1\" name=\"ls builder\">\
+  \    <shell workdir=\"dir2\" command=\"ls /\"/>\
+  \    <setProperty property=\"prop\" value=\"foobar\"/>\
+  \  </builder>\
+  \</config>"
 expectedResultForValidXml = Success config
  where
   builder =
@@ -84,19 +120,11 @@ expectedResultForValidXml = Success config
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }
-  config = Config (builder :| []) []
+  subst = [("aa", "11"), ("aa", "11"), ("bb", "22")]
+  config = Config (builder :| []) subst
 
 spec :: SpecWith ()
-spec = do
-  describe "duplicates" $ do
-    it "duplicates . duplicates = [] (duplicates doesn't returns duplicates)" $ property $
-      \(x :: [Int]) -> duplicates (duplicates x) `shouldBe` []
-    it "duplicates [0, 0] should be [0]" $
-      duplicates [0, 0] `shouldBe` [0]
-    it "duplicates [0, 0, 0] should be [0]" $
-      duplicates [0, 0] `shouldBe` [0]
-    it "duplicates [0, 1] should be []" $
-      duplicates [0, 1] `shouldBe` []
+spec =
   describe "parseXmlString" $ do
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml
@@ -122,4 +150,10 @@ spec = do
       parseXmlString badXml10 `shouldBe` expectedResultForBadXml10
     it "should fail on empty shell commands" $
       parseXmlString badXml11 `shouldBe` expectedResultForBadXml11
+    it "should collect errors of substitutions even if there are no builders" $
+      parseXmlString badXml12 `shouldBe` expectedResultForBadXml12
+    it "should fail on missing value in entry" $
+      parseXmlString badXml13 `shouldBe` expectedResultForBadXml13
+    it "should fail on missing name in entry" $
+      parseXmlString badXml14 `shouldBe` expectedResultForBadXml14
 

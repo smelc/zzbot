@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module ConfigSpec (spec) where
 
 import Data.List
@@ -56,7 +58,17 @@ testSplitDelimiters =
       splitDelimiters ("$(", ")") "foo$(var)" `shouldBe` Just("foo", "var", "")
 
 testSubstitute :: SpecWith ()
-testSubstitute =
+testSubstitute = do
+  describe "duplicates" $ do
+    it "duplicates . duplicates = [] (duplicates doesn't returns duplicates)" $
+      property $
+        \(x :: [Int]) -> duplicates (duplicates x) `shouldBe` []
+    it "duplicates [0, 0] should be [0]" $
+      duplicates [0, 0] `shouldBe` [0]
+    it "duplicates [0, 0, 0] should be [0]" $
+      duplicates [0, 0] `shouldBe` [0]
+    it "duplicates [0, 1] should be []" $
+      duplicates [0, 1] `shouldBe` []
   describe "subsitute" $ do
     it "should succeed when all variables are known" $
       substitute ("(", ")") goodSubst builder `shouldBe` V.Success expectedSuccess
