@@ -7,6 +7,7 @@ module Config (
   Builder(..)
   , Config(..)
   , Command(..)
+  , duplicates
   , parseVars
   , renderAsXml
   , splitAround
@@ -52,13 +53,22 @@ instance Show Command where
 -- types
 type Subst = [(String,String)]
 
-data ValidationError = KeyNotFound Subst String
+data ValidationError
+  = DuplicateSubstEntries [String]
+  | KeyNotFound Subst String
   deriving (Eq, Ord)
 
 instance Show ValidationError where
+  show (DuplicateSubstEntries entries) =
+    "Some substitutions members are mapped more thance once: "
+      ++ intercalate "," entries
   show (KeyNotFound subst key) =
-    printf "key not mapped by substitution: %s. Substitution's domain is: %s" key domain
-   where domain = unwords (map fst subst)
+    printf
+      "key not mapped by substitution: %s. Substitution's domain is: %s"
+      key
+      domain
+   where
+    domain = unwords (map fst subst)
 
 class Substable a where
     -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
@@ -123,6 +133,19 @@ applySubstitution delimiters subst text =
           substApplier (Left text) = text
           substApplier (Right varName) = fromJust $ lookup varName subst
 
+----------------
+-- Validation --
+----------------
+
+duplicates
+  :: (Eq a, Ord a)
+  => [a] -- ^ The list to look for duplicates in
+  -> [a]
+duplicates elems = Map.keys (Map.filter (>1) counts)
+ where
+  counts = Map.unionsWith (+) (map singleton elems)
+  singleton elem = Map.singleton elem 1
+
 ---------
 -- XML --
 ---------
@@ -153,10 +176,8 @@ instance ToXml Subst where
     toXml subst =
       Element "substitution" Map.empty  (map (NodeElement . entryToXml) subst)
       where entryToXml :: (String, String) -> Element
-            entryToXml (name, value) = Element "entry" (Map.fromList
-                                                  [(simpleName "name", T.pack name),
-                                                   (simpleName "value", T.pack value)])
-                                               []
+            entryToXml (name, value) =
+              Element "entry" ("name" =: name <> "value" =: value) []
 
 instance ToXml Config where
   toXml (Config builders subst) =
