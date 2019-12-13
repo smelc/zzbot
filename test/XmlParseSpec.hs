@@ -125,15 +125,6 @@ expectedResultForValidXml = Success config
 
 spec :: SpecWith ()
 spec = do
-  describe "duplicates" $ do
-    it "duplicates . duplicates = [] (duplicates doesn't returns duplicates)" $ property $
-      \(x :: [Int]) -> duplicates (duplicates x) `shouldBe` []
-    it "duplicates [0, 0] should be [0]" $
-      duplicates [0, 0] `shouldBe` [0]
-    it "duplicates [0, 0, 0] should be [0]" $
-      duplicates [0, 0] `shouldBe` [0]
-    it "duplicates [0, 1] should be []" $
-      duplicates [0, 1] `shouldBe` []
   describe "parseXmlString" $ do
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml

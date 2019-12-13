@@ -3,8 +3,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 
 module XmlParse (
-  duplicates
-  , failWith
+    failWith
   , parseXmlFile
   , parseXmlString
   , XmlParsingError(..)
@@ -14,6 +13,7 @@ module XmlParse (
 import Data.Char
 import Data.Either
 import Data.Either.Combinators
+import Data.Foldable
 import Data.Functor.Alt
 import Data.List
 import Data.List.NonEmpty (NonEmpty)
@@ -51,8 +51,7 @@ data ZXML = ZElem {tag :: String,
                    maybeLine :: Maybe Line}
 
 data XmlParsingError
-  = DuplicateSubstEntries [String] (Maybe Line)
-  | EmptyCommand (Maybe Line)
+  = EmptyCommand (Maybe Line)
   | EmptyDocument
   | MissingAttribute String String (Maybe Line)
   | NoBuilder (Maybe Line)
@@ -63,7 +62,6 @@ data XmlParsingError
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
-  show (DuplicateSubstEntries entries line) = giveLineInMsg ("Some substitutions members are mapped more thance once: " ++ intercalate "," entries) line
   show (EmptyCommand line) = giveLineInMsg "Commands cannot be empty" line
   show EmptyDocument = "The document is empty"
   show (NoBuilder line) =
@@ -138,15 +136,6 @@ zXMLsToBuilders maybeLine zxmls =
   case NE.nonEmpty zxmls of
     Just nonEmptyXmls -> traverse zXMLToBuilder nonEmptyXmls
     Nothing -> failWith (NoBuilder maybeLine)
-
-duplicates
-  :: (Eq a, Ord a)
-  => [a] -- ^ The list to look for duplicates in
-  -> [a]
-duplicates elems = Map.keys (Map.filter (>1) counts)
- where
-  counts = Map.unionsWith (+) (map singleton elems)
-  singleton elem = Map.singleton elem 1
 
 parseEntry :: ZXML -> XmlValidation (String, String)
 parseEntry zxml@ZElem {tag, maybeLine}
