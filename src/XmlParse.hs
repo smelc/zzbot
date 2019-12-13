@@ -133,6 +133,12 @@ zXMLToBuilder zxml@ZElem {children} = do
   steps <- traverse parseStep children
   return $ Builder workdir name steps
 
+zXMLsToBuilders :: Maybe Line -> [ZXML] -> XmlValidation (NonEmpty Builder)
+zXMLsToBuilders maybeLine zxmls =
+  case NE.nonEmpty zxmls of
+    Just nonEmptyXmls -> traverse zXMLToBuilder nonEmptyXmls
+    Nothing -> failWith (NoBuilder maybeLine)
+
 duplicates
   :: (Eq a, Ord a)
   => [a] -- ^ The list to look for duplicates in
@@ -142,42 +148,53 @@ duplicates elems = Map.keys (Map.filter (>1) counts)
   counts = Map.unionsWith (+) (map singleton elems)
   singleton elem = Map.singleton elem 1
 
-zXMLToSubst :: ZXML -> XmlValidation Subst
-zXMLToSubst zxml@ZElem {children, maybeLine} =
-  let ventries :: XmlValidation [(String, String)] = traverse zXMLToEntry children in
-      case ventries of
-        Failure err -> Failure err
-        Success entries ->
-          let ds = duplicates $ map fst entries in
-          case ds of
-            []    -> Success entries
-            probs -> failWith (DuplicateSubstEntries probs maybeLine)
-        where zXMLToEntry :: ZXML -> XmlValidation (String, String)
-              zXMLToEntry zxml = do
-                name <- getAttrValue zxml "name"
-                value <- getAttrValue zxml "value"
-                return (name, value)
+parseEntry :: ZXML -> XmlValidation (String, String)
+parseEntry zxml@ZElem {tag, maybeLine}
+  | tag == tEntry = zXMLToEntry zxml
+  | otherwise = failWith (UnexpectedTag [tEntry] tag maybeLine)
 
-parseLevel1 :: ZXML -> XmlValidation (Either Subst Builder)
--- ^ Parse the content below <config> i.e. right below the top level element
-parseLevel1 zxml@ZElem {tag, maybeLine}
-  | tag == tBuilder      = Right <$> zXMLToBuilder zxml
-  | tag == tSubstitution = Left <$> zXMLToSubst zxml
-  | otherwise = failWith (UnexpectedTag [tBuilder, tSubstitution] tag maybeLine)
+zXMLToEntry :: ZXML -> XmlValidation (String, String)
+zXMLToEntry zxml = do
+  name <- getAttrValue zxml "name"
+  value <- getAttrValue zxml "value"
+  return (name, value)
+
+zXMLToSubst :: ZXML -> XmlValidation Subst
+zXMLToSubst zxml@ZElem {children, maybeLine} = traverse zXMLToEntry children
+
+data ConfigChildren = ConfigChildren
+  { substs :: [ZXML]
+  , builders :: [ZXML]
+  , unknowns :: [ZXML]
+  }
+
+instance Semigroup ConfigChildren where
+  (ConfigChildren s1 b1 u1) <> (ConfigChildren s2 b2 u2) =
+    ConfigChildren (s1 <> s2) (b1 <> b2) (u1 <> u2)
+
+instance Monoid ConfigChildren where
+  mempty = ConfigChildren [] [] []
+
+sortConfigChildren :: [ZXML] -> ConfigChildren
+sortConfigChildren = foldMap inject
+ where
+  inject zxml@ZElem{tag}
+    | tag == tBuilder = ConfigChildren [] [zxml] []
+    | tag == tSubstitution = ConfigChildren [zxml] [] []
+    | otherwise = ConfigChildren [] [] [zxml]
 
 zXMLToConfig :: ZXML -> XmlValidation Config
 zXMLToConfig zxml@ZElem {tag, children, maybeLine}
-  | tag == tConfig =
-      case NE.nonEmpty children of
-        Just level1 -> traverse parseLevel1 level1 `bindValidation` (helper . NE.toList)
-        Nothing -> failWith (NoBuilder maybeLine)
+  | tag == tConfig = do
+      traverse unknownTag otherXmls
+      builders <- zXMLsToBuilders maybeLine builderXmls
+      substs <- traverse zXMLToSubst substXmls
+      return $ Config builders (concat substs)
   | otherwise = failWith $ UnexpectedTag [tConfig] tag maybeLine
-  where helper :: [Either Subst Builder] -> XmlValidation Config
-        helper es =
-          let (substs, builders) = partitionEithers es
-          in case builders of
-               [] -> failWith (NoBuilder maybeLine)
-               (hd:tl) -> Success $ Config (hd NE.:| tl) (concat substs)
+ where
+  ConfigChildren substXmls builderXmls otherXmls = sortConfigChildren children
+  unknownTag ZElem{tag, maybeLine} =
+    failWith (UnexpectedTag [tBuilder, tSubstitution] tag maybeLine)
 
 fromJustZXml :: Maybe ZXML -> XmlValidation ZXML
 fromJustZXml = maybe (failWith EmptyDocument) pure
