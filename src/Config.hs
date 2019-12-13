@@ -176,10 +176,8 @@ instance ToXml Subst where
     toXml subst =
       Element "substitution" Map.empty  (map (NodeElement . entryToXml) subst)
       where entryToXml :: (String, String) -> Element
-            entryToXml (name, value) = Element "entry" (Map.fromList
-                                                  [(simpleName "name", T.pack name),
-                                                   (simpleName "value", T.pack value)])
-                                               []
+            entryToXml (name, value) =
+              Element "entry" ("name" =: name <> "value" =: value) []
 
 instance ToXml Config where
   toXml (Config builders subst) =
