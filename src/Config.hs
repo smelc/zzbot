@@ -1,11 +1,13 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Config (
   Builder(..)
   , Config(..)
+  , ConfigValidation
   , Command(..)
   , duplicates
   , parseVars
@@ -15,6 +17,7 @@ module Config (
   , Step(..)
   , Subst
   , Substable(..)
+  , substituteConfig
   , ValidationError(..)
 ) where
 
@@ -58,6 +61,8 @@ data ValidationError
   | KeyNotFound Subst String
   deriving (Eq, Ord)
 
+type ConfigValidation = Validation (Set.Set ValidationError)
+
 instance Show ValidationError where
   show (DuplicateSubstEntries entries) =
     "Some substitutions members are mapped more thance once: "
@@ -72,7 +77,7 @@ instance Show ValidationError where
 
 class Substable a where
     -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
-    substitute :: (String, String) -> Subst -> a -> Validation (Set.Set ValidationError) a
+    substitute :: (String, String) -> Subst -> a -> ConfigValidation a
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -122,7 +127,7 @@ validateVars delimiters subst text =
 
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
-applySubstitution :: (String, String) -> Subst -> String -> Validation (Set.Set ValidationError) String
+applySubstitution :: (String, String) -> Subst -> String -> ConfigValidation String
 applySubstitution delimiters subst text =
     if not (null errors)
       then Failure (Set.fromList errors)
@@ -223,3 +228,13 @@ instance Substable Builder where
       <$> traverse (applySubstitution delimiters subst) workdir
       <*> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps
+
+substituteConfig :: Config -> ConfigValidation Config
+substituteConfig Config{builders, subst} =
+    if not $ null multikeys
+    then Failure $ Set.singleton $ DuplicateSubstEntries multikeys
+    else case substedBuilders of
+      Failure err -> Failure err
+      Success newBuilders -> Success $ Config newBuilders []
+    where multikeys = duplicates (map fst subst)
+          substedBuilders = traverse (substitute ("$[", "]") subst) builders

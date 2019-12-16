@@ -29,11 +29,17 @@ process printOrExec filepath  = do
         putStrLn $ unlines $ map show $ Set.toList err
         return (ExitFailure 1)
       Success config@Config{subst, builders} ->
-        if printOrExec
-        then do
-          LT.putStrLn $ renderAsXml config
-          return ExitSuccess
-        else andExitCodes <$> traverse runBuild builders
+        let sconfig = substituteConfig config in
+        case sconfig of
+          Failure (err :: Set.Set ValidationError) -> do
+            putStrLn $ unlines $ map show $ Set.toList err
+            return (ExitFailure 1)
+          Success config@Config{subst, builders} ->
+            if printOrExec
+            then do
+            LT.putStrLn $ renderAsXml config
+            return ExitSuccess
+            else andExitCodes <$> traverse runBuild builders
 
 andExitCode :: ExitCode -> ExitCode -> ExitCode
 andExitCode (ExitFailure i) (ExitFailure j) = ExitFailure (max i j)

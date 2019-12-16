@@ -3,8 +3,8 @@
     <entry name="dir" value="/"/>
     <entry name="cmd" value="ls"/>
   </substitution>
-  <builder name="ls builder">
-    <shell command="ls /"/>
+  <builder name="$[cmd] builder">
+    <shell command="$[cmd] $[dir]"/>
     <shell workdir="/etc" command="pwd"/>
     <setProperty property="prop" value="foobar"/>
   </builder>
