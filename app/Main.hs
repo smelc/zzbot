@@ -24,12 +24,13 @@ process :: Bool -- ^ Whether to print (True) or execute the builder (False)
         -> IO ExitCode
 process printOrExec filepath  = do
   mconfig :: XmlValidation Config <- parseXmlFile filepath
+  env <- getEnvironment
   case mconfig of
       Failure (err :: Set.Set XmlParsingError) -> do
         putStrLn $ unlines $ map show $ Set.toList err
         return (ExitFailure 1)
       Success config@Config{subst, builders} ->
-        let sconfig = substituteConfig config in
+        let sconfig = substAll env config in
         case sconfig of
           Failure (err :: Set.Set ValidationError) -> do
             putStrLn $ unlines $ map show $ Set.toList err

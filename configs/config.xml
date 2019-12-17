@@ -7,5 +7,6 @@
     <shell command="$[cmd] $[dir]"/>
     <shell workdir="/etc" command="pwd"/>
     <setProperty property="prop" value="foobar"/>
+    <shell command="echo ${HOME}"/>
   </builder>
 </config>

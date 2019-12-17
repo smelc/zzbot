@@ -17,7 +17,7 @@ module Config (
   , Step(..)
   , Subst
   , Substable(..)
-  , substituteConfig
+  , substAll
   , ValidationError(..)
 ) where
 
@@ -229,8 +229,9 @@ instance Substable Builder where
       <*> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps
 
-substituteConfig :: Config -> ConfigValidation Config
-substituteConfig Config{builders, subst} =
+-- |Substitute $[...] variables
+substSquare :: Config -> ConfigValidation Config
+substSquare Config{builders, subst} =
     if not $ null multikeys
     then Failure $ Set.singleton $ DuplicateSubstEntries multikeys
     else case substedBuilders of
@@ -238,3 +239,20 @@ substituteConfig Config{builders, subst} =
       Success newBuilders -> Success $ Config newBuilders []
     where multikeys = duplicates (map fst subst)
           substedBuilders = traverse (substitute ("$[", "]") subst) builders
+
+-- |Substitute environment variables (${})
+substEnv :: [(String, String)] -- ^ The environment
+         -> Config             -- ^ The configuration to substitute
+         -> ConfigValidation Config
+substEnv env Config{builders, subst} =
+  case substedBuilders of
+    Failure err -> Failure err
+    Success newBuilders -> Success $ Config newBuilders subst
+  where substedBuilders = traverse (substitute ("${", "}") env) builders
+
+-- |Substitute $[..] variables and environment variables (${})
+substAll :: [(String, String)]
+         -> Config
+         -> ConfigValidation Config
+substAll env config =
+  substSquare config `bindValidation` substEnv env
