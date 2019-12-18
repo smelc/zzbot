@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -62,6 +63,9 @@ data ValidationError
   deriving (Eq, Ord)
 
 type ConfigValidation = Validation (Set.Set ValidationError)
+
+failWith :: ValidationError -> ConfigValidation a
+failWith error = Failure (Set.singleton error)
 
 instance Show ValidationError where
   show (DuplicateSubstEntries entries) =
@@ -229,26 +233,26 @@ instance Substable Builder where
       <*> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps
 
+checkNoDuplicates :: Subst -> ConfigValidation ()
+checkNoDuplicates subst =
+  case duplicates (map fst subst) of
+    [] -> Success ()
+    dupes -> failWith $ DuplicateSubstEntries dupes
+
 -- |Substitute $[...] variables
 substSquare :: Config -> ConfigValidation Config
-substSquare Config{builders, subst} =
-    if not $ null multikeys
-    then Failure $ Set.singleton $ DuplicateSubstEntries multikeys
-    else case substedBuilders of
-      Failure err -> Failure err
-      Success newBuilders -> Success $ Config newBuilders []
-    where multikeys = duplicates (map fst subst)
-          substedBuilders = traverse (substitute ("$[", "]") subst) builders
+substSquare Config{builders, subst} = do
+  checkNoDuplicates subst
+  substedBuilders <- traverse (substitute ("$[", "]") subst) builders
+  return $ Config substedBuilders []
 
 -- |Substitute environment variables (${})
 substEnv :: [(String, String)] -- ^ The environment
          -> Config             -- ^ The configuration to substitute
          -> ConfigValidation Config
-substEnv env Config{builders, subst} =
-  case substedBuilders of
-    Failure err -> Failure err
-    Success newBuilders -> Success $ Config newBuilders subst
-  where substedBuilders = traverse (substitute ("${", "}") env) builders
+substEnv env Config{builders, subst} = do
+  substedBuilders <- traverse (substitute ("${", "}") env) builders
+  return $ Config substedBuilders subst
 
 -- |Substitute $[..] variables and environment variables (${})
 substAll :: [(String, String)]
