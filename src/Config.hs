@@ -174,7 +174,8 @@ attr =? Nothing = Map.empty
 attr =? Just value = attr =: value
 
 instance ToXml Step where
-    toXml (SetPropertyFromValue prop value) = Element "set_property" (prop =: value) []
+    toXml (SetPropertyFromValue prop value) =
+      Element "setProperty" ("property" =: prop <> "value" =: value) []
     toXml (ShellCmd workdir cmd) =
       Element "shell" ("command" =: show cmd <> "workdir" =? workdir) []
 
