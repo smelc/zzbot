@@ -103,8 +103,7 @@ process printOnly env xml =
       displayErrors errors
       return (ExitFailure 1)
     Success config ->
-      let msconfig = substAll env config in
-      case msconfig of
+      case substAll env config of
         Failure errors -> do
           displayErrors errors
           return (ExitFailure 1)
