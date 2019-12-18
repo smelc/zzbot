@@ -19,40 +19,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Options.Applicative as Opt
 
-process :: Bool -- ^ Whether to print (True) or execute the builder (False)
-        -> String -- ^ The file containing the builder's description
-        -> IO ExitCode
-process printOrExec filepath  = do
-  mconfig :: XmlValidation Config <- parseXmlFile filepath
-  env <- getEnvironment
-  case mconfig of
-      Failure (err :: Set.Set XmlParsingError) -> do
-        putStrLn $ unlines $ map show $ Set.toList err
-        return (ExitFailure 1)
-      Success config@Config{subst, builders} ->
-        let sconfig = substAll env config in
-        case sconfig of
-          Failure (err :: Set.Set ValidationError) -> do
-            putStrLn $ unlines $ map show $ Set.toList err
-            return (ExitFailure 1)
-          Success config@Config{subst, builders} ->
-            if printOrExec
-            then do
-            LT.putStrLn $ renderAsXml config
-            return ExitSuccess
-            else andExitCodes <$> traverse runBuild builders
-
-andExitCode :: ExitCode -> ExitCode -> ExitCode
-andExitCode (ExitFailure i) (ExitFailure j) = ExitFailure (max i j)
-andExitCode (ExitFailure i) _ = ExitFailure i
-andExitCode _ (ExitFailure j) = ExitFailure j
-andExitCode c1 c2 = c1
-
-andExitCodes
-  :: NonEmpty ExitCode -- ^ The list of return codes to combine
-  -> ExitCode
-andExitCodes = foldr1 andExitCode
-
 {- HLINT ignore Options -}
 data Options = Options { optFilenames :: NonEmpty String, optPrint :: Bool }
 
@@ -66,5 +32,7 @@ optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 main :: IO ()
 main = do
   Options{optFilenames, optPrint} <- Opt.execParser optionsParserInfo
-  codes <- traverse (process optPrint) optFilenames
+  env <- getEnvironment
+  xmls <- traverse readFile optFilenames
+  codes <- traverse (process optPrint env) xmls
   exitWith $ andExitCodes codes

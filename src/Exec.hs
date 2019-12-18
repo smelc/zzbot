@@ -6,6 +6,8 @@
 module Exec (
   MonadExec(..)
   , runBuild
+  , process
+  , andExitCodes
  ) where
 
 import Control.Applicative
@@ -13,20 +15,24 @@ import Control.Monad
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
+import Data.Validation
 import System.Exit
 import System.IO
 import System.Process
 
 import Config
+import XmlParse
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import qualified Data.Text.Lazy as LT
 import qualified GHC.IO.Handle as Handle
 
 -- Maps build variables to their values
 type BuildContext = Map.Map String String
 
-class MonadExec m where
+class Monad m => MonadExec m where
   zzLog :: Color -> String -> m ()
   runShellCommand
     :: Maybe String -- ^ Optional path to the working directory
@@ -51,7 +57,7 @@ instance MonadExec IO where
   putErrLn = hPutStrLn stderr
 
 runSteps
-  :: (Monad m, MonadExec m)
+  :: MonadExec m
   => Maybe String
   -> BuildContext
   -> [Step]
@@ -75,3 +81,41 @@ runSteps builderWorkdir ctxt (ShellCmd workdir cmd : steps) = do
 
 runBuild :: (Monad m, MonadExec m) => Builder -> m ExitCode
 runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
+
+andExitCodes :: NonEmpty ExitCode -> ExitCode
+andExitCodes = foldr1 andExitCode
+
+andExitCode :: ExitCode -> ExitCode -> ExitCode
+andExitCode (ExitFailure i) (ExitFailure j) = ExitFailure (max i j)
+andExitCode (ExitFailure i) _ = ExitFailure i
+andExitCode _ (ExitFailure j) = ExitFailure j
+andExitCode c1 c2 = c1
+
+process
+  :: MonadExec m
+  => Bool -- ^ Whether to print (True) or execute the builder (False)
+  -> [(String, String)] -- ^ The environment
+  -> String -- ^ The content of the XML file to process
+  -> m ExitCode
+process printOnly env xml =
+  case parseXmlString xml of
+    Failure errors -> do
+      displayErrors errors
+      return (ExitFailure 1)
+    Success config ->
+      let msconfig = substAll env config in
+      case msconfig of
+        Failure errors -> do
+          displayErrors errors
+          return (ExitFailure 1)
+        Success sconfig@Config{builders} ->
+          if printOnly
+            then do
+              putOutLn (LT.unpack $ renderAsXml sconfig)
+              return ExitSuccess
+            else
+              andExitCodes <$> traverse runBuild builders
+ where
+  displayErrors :: (MonadExec m, Show a) => Set.Set a -> m ()
+  displayErrors errors = putErrLn $ unlines $ map show $ Set.toList errors
+
