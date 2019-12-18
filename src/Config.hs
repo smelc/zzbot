@@ -233,16 +233,18 @@ instance Substable Builder where
       <*> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps
 
+checkNoDuplicates :: Subst -> ConfigValidation ()
+checkNoDuplicates subst =
+  case duplicates (map fst subst) of
+    [] -> Success ()
+    dupes -> failWith $ DuplicateSubstEntries dupes
+
 -- |Substitute $[...] variables
 substSquare :: Config -> ConfigValidation Config
-substSquare Config{builders, subst} =
-  if not (null dupes)
-    then do
-      substedBuilders <- traverse (substitute ("$[", "]") subst) builders
-      return $ Config substedBuilders []
-    else failWith $ DuplicateSubstEntries dupes
- where
-  dupes = duplicates (map fst subst)
+substSquare Config{builders, subst} = do
+  checkNoDuplicates subst
+  substedBuilders <- traverse (substitute ("$[", "]") subst) builders
+  return $ Config substedBuilders []
 
 -- |Substitute environment variables (${})
 substEnv :: [(String, String)] -- ^ The environment
