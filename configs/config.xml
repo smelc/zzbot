@@ -6,7 +6,11 @@
   <builder name="$[cmd] builder">
     <shell command="$[cmd] $[dir]"/>
     <shell workdir="/etc" command="pwd"/>
-    <setProperty property="prop" value="foobar"/>
-    <shell command="echo ${HOME}"/>
+    <setProperty property="home" value="${HOME}"/>
+    <shell command="echo «home»"/>
+    <!-- Let's build 'home' with concatenation: -->
+    <setProperty property="home" value="/home"/>
+    <setProperty property="home" value="«home»/${USER}"/>
+    <shell command="echo «home»"/>
   </builder>
 </config>

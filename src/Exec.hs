@@ -35,8 +35,8 @@ type BuildContext = Map.Map String String
 class Monad m => MonadExec m where
   zzLog :: Color -> String -> m ()
   runShellCommand
-    :: Maybe String -- ^ Optional path to the working directory
-    -> Command -- ^ The command to execute
+    :: Maybe String                 -- ^ Optional path to the working directory
+    -> Command                      -- ^ The command to execute
     -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
   putOutLn :: String -> m ()
   putErrLn :: String -> m ()
@@ -56,6 +56,8 @@ instance MonadExec IO where
 
   putErrLn = hPutStrLn stderr
 
+dynSubstDelimiters = ("«", "»")
+
 runSteps
   :: MonadExec m
   => Maybe String
@@ -63,21 +65,38 @@ runSteps
   -> [Step]
   -> m ExitCode
 runSteps _ ctxt [] = return ExitSuccess
-runSteps builderWorkdir ctxt (SetPropertyFromValue prop value : steps) =
-  runSteps builderWorkdir (Map.insert prop value ctxt) steps
-runSteps builderWorkdir ctxt (ShellCmd workdir cmd : steps) = do
+runSteps builderWorkdir ctxt (hd:nexts) =
+  case substitute dynSubstDelimiters (Map.toList ctxt) hd of
+    Failure err -> do
+      putErrLn $ buildErrorMsg err
+      return $ ExitFailure 1
+    Success substedHd -> do
+      next :: Either ExitCode BuildContext <- runStep builderWorkdir ctxt substedHd
+      case next of
+        Left rc -> return rc
+        Right (nextCtxt :: BuildContext) -> runSteps builderWorkdir nextCtxt nexts
+
+runStep :: MonadExec m
+        => Maybe String -- ^ The builder's workdir, if any
+        -> BuildContext
+        -> Step         -- ^ The step to execute
+        -> m (Either ExitCode BuildContext)
+runStep builderWorkdir ctxt (SetPropertyFromValue prop value) =
+  return $ Right (Map.insert prop value ctxt)
+runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
   zzLog Green (show cmd)
   (rc, outmsg, errmsg) <- runShellCommand (workdir <|> builderWorkdir) cmd
   unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
   unless (null errmsg) $ putErrLn errmsg -- show step error output, if any
   case rc of
     ExitSuccess ->
-      -- step succeeded, continue execution
-      runSteps builderWorkdir ctxt steps
+      -- step succeeded, execution will continue
+      return $ Right ctxt
     _ -> do
-      -- step failed, stop execution
+      -- step failed, execution will stop
       zzLog Red (show cmd ++ " failed: " ++ show rc)
-      return rc
+      return $ Left rc
+  
 
 runBuild :: (Monad m, MonadExec m) => Builder -> m ExitCode
 runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
@@ -90,6 +109,12 @@ andExitCode (ExitFailure i) (ExitFailure j) = ExitFailure (max i j)
 andExitCode (ExitFailure i) _ = ExitFailure i
 andExitCode _ (ExitFailure j) = ExitFailure j
 andExitCode c1 c2 = c1
+
+buildErrorMsg :: Show a => Set.Set a -> String
+buildErrorMsg errors = unlines $ map show $ Set.toList errors
+
+displayErrors :: (MonadExec m, Show a) => Set.Set a -> m ()
+displayErrors errors = putErrLn $ buildErrorMsg errors
 
 process
   :: MonadExec m
@@ -114,7 +139,4 @@ process printOnly env xml =
               return ExitSuccess
             else
               andExitCodes <$> traverse runBuild builders
- where
-  displayErrors :: (MonadExec m, Show a) => Set.Set a -> m ()
-  displayErrors errors = putErrLn $ unlines $ map show $ Set.toList errors
 

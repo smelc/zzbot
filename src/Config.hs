@@ -6,7 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Config (
-  Builder(..)
+  applySubstitution
+  , Builder(..)
   , Config(..)
   , ConfigValidation
   , Command(..)
