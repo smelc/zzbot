@@ -4,6 +4,7 @@ module ExecSpec (spec) where
 
 import Config
 import Control.Monad.Writer
+import Control.Monad.Except
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Exec
 import System.Exit
@@ -60,9 +61,9 @@ instance MonadExec TracingMockExec where
 spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
-      runLoggingMockExec (runBuild testBuilder) `shouldBe` expectedOutput
+      runLoggingMockExec (runExceptT (runBuild testBuilder)) `shouldBe` expectedOutput
     it "should set the working directory as specified" $
-      runTracingMockExec (runBuild testBuilder) `shouldBe` expectedTrace
+      runTracingMockExec (runExceptT (runBuild testBuilder)) `shouldBe` expectedTrace
   where
     testBuilder =
       Builder
@@ -73,7 +74,7 @@ spec =
         , ShellCmd Nothing (Command "some" ["junk"])
         ]
     expectedOutput =
-      ( ExitFailure 127
+      ( Left (ExecutionError Nothing (ExitFailure 127))
       , [ Message Green "ls a"
         , StdOut "foo bar"
         , Message Green "ls b"
@@ -84,7 +85,7 @@ spec =
         ]
       )
     expectedTrace =
-      (ExitSuccess
+      ( Right ()
       , [ Execution (Just "dir1") (Command "ls" ["a"])
         , Execution (Just "dir2") (Command "ls" ["b"])
         , Execution (Just "dir1") (Command "some" ["junk"])
