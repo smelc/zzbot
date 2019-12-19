@@ -5,13 +5,17 @@
 -- File to execute a build specified as a Builder
 module Exec (
   MonadExec(..)
+  , ExecutionError(..)
   , runBuild
   , process
-  , andExitCodes
  ) where
 
 import Control.Applicative
+import Control.Arrow (left)
 import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Except
+import Data.Foldable (traverse_)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -56,6 +60,23 @@ instance MonadExec IO where
 
   putErrLn = hPutStrLn stderr
 
+instance MonadExec m => MonadExec (ExceptT e m) where
+  zzLog textColor logEntry = lift (zzLog textColor logEntry)
+  runShellCommand workdir command = lift (runShellCommand workdir command)
+  putOutLn str = lift (putOutLn str)
+  putErrLn str = lift (putErrLn str)
+
+data ExecutionError = ExecutionError (Maybe String) ExitCode
+  deriving (Eq, Show)
+
+type ExecError m = ExceptT ExecutionError m
+
+inject :: (Show e, Monad m) => Validation (Set.Set e) a -> ExecError m a
+inject = ExceptT . return . left makeError . toEither
+ where
+  makeError errors =
+    ExecutionError (Just $ buildErrorMsg errors) (ExitFailure 1)
+
 dynSubstDelimiters = ("«", "»")
 
 runSteps
@@ -63,26 +84,20 @@ runSteps
   => Maybe String
   -> BuildContext
   -> [Step]
-  -> m ExitCode
-runSteps _ ctxt [] = return ExitSuccess
-runSteps builderWorkdir ctxt (hd:nexts) =
-  case substitute dynSubstDelimiters (Map.toList ctxt) hd of
-    Failure err -> do
-      putErrLn $ buildErrorMsg err
-      return $ ExitFailure 1
-    Success substedHd -> do
-      next :: Either ExitCode BuildContext <- runStep builderWorkdir ctxt substedHd
-      case next of
-        Left rc -> return rc
-        Right (nextCtxt :: BuildContext) -> runSteps builderWorkdir nextCtxt nexts
+  -> ExecError m ()
+runSteps _ ctxt [] = return ()
+runSteps builderWorkdir ctxt (step:steps) = do
+  step' <- inject (substitute dynSubstDelimiters (Map.toList ctxt) step)
+  ctxt' <- runStep builderWorkdir ctxt step'
+  runSteps builderWorkdir ctxt' steps
 
 runStep :: MonadExec m
         => Maybe String -- ^ The builder's workdir, if any
         -> BuildContext
         -> Step         -- ^ The step to execute
-        -> m (Either ExitCode BuildContext)
+        -> ExecError m BuildContext
 runStep builderWorkdir ctxt (SetPropertyFromValue prop value) =
-  return $ Right (Map.insert prop value ctxt)
+  return $ Map.insert prop value ctxt
 runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
   zzLog Green (show cmd)
   (rc, outmsg, errmsg) <- runShellCommand (workdir <|> builderWorkdir) cmd
@@ -91,30 +106,33 @@ runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
   case rc of
     ExitSuccess ->
       -- step succeeded, execution will continue
-      return $ Right ctxt
+      return ctxt
     _ -> do
       -- step failed, execution will stop
       zzLog Red (show cmd ++ " failed: " ++ show rc)
-      return $ Left rc
-  
+      throwError (ExecutionError Nothing rc)
 
-runBuild :: (Monad m, MonadExec m) => Builder -> m ExitCode
+runBuild :: (Monad m, MonadExec m) => Builder -> ExecError m ()
 runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
-
-andExitCodes :: NonEmpty ExitCode -> ExitCode
-andExitCodes = foldr1 andExitCode
-
-andExitCode :: ExitCode -> ExitCode -> ExitCode
-andExitCode (ExitFailure i) (ExitFailure j) = ExitFailure (max i j)
-andExitCode (ExitFailure i) _ = ExitFailure i
-andExitCode _ (ExitFailure j) = ExitFailure j
-andExitCode c1 c2 = c1
 
 buildErrorMsg :: Show a => Set.Set a -> String
 buildErrorMsg errors = unlines $ map show $ Set.toList errors
 
-displayErrors :: (MonadExec m, Show a) => Set.Set a -> m ()
-displayErrors errors = putErrLn $ buildErrorMsg errors
+process'
+  :: MonadExec m
+  => Bool -- ^ Whether to print (True) or execute the builder (False)
+  -> [(String, String)] -- ^ The environment
+  -> String -- ^ The content of the XML file to process
+  -> ExecError m ()
+process' printOnly env xml = do
+  config <- inject (parseXmlString xml)
+  sconfig@Config{builders} <- inject (substAll env config)
+  if printOnly
+    then do
+      putOutLn (LT.unpack $ renderAsXml sconfig)
+      return ()
+    else
+      traverse_ runBuild builders
 
 process
   :: MonadExec m
@@ -122,21 +140,11 @@ process
   -> [(String, String)] -- ^ The environment
   -> String -- ^ The content of the XML file to process
   -> m ExitCode
-process printOnly env xml =
-  case parseXmlString xml of
-    Failure errors -> do
-      displayErrors errors
-      return (ExitFailure 1)
-    Success config ->
-      case substAll env config of
-        Failure errors -> do
-          displayErrors errors
-          return (ExitFailure 1)
-        Success sconfig@Config{builders} ->
-          if printOnly
-            then do
-              putOutLn (LT.unpack $ renderAsXml sconfig)
-              return ExitSuccess
-            else
-              andExitCodes <$> traverse runBuild builders
-
+process printOnly env xml = do
+  result <- runExceptT (process' printOnly env xml)
+  case result of
+    Left (ExecutionError msg code) -> do
+      traverse_ putErrLn msg
+      return code
+    Right () ->
+      return ExitSuccess

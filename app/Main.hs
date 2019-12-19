@@ -35,4 +35,4 @@ main = do
   env <- getEnvironment
   xmls <- traverse readFile optFilenames
   codes <- traverse (process optPrint env) xmls
-  exitWith $ andExitCodes codes
+  exitWith $ maximum codes
