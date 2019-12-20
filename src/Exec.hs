@@ -4,11 +4,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 -- File to execute a build specified as a Builder
-module Exec (
-  MonadExec(..)
+module Exec
+  ( MonadExec(..)
+  , LogLevel(..)
   , runBuild
   , process
- ) where
+   ) where
 
 import Control.Applicative
 import Control.Arrow (left)
@@ -42,8 +43,11 @@ subprocessErrorCode = ExitFailure 3
 -- Maps build variables to their values
 type BuildContext = Map.Map String String
 
+data LogLevel = Info | Error
+  deriving (Eq, Show)
+
 class Monad m => MonadExec m where
-  zzLog :: Color -> String -> m ()
+  zzLog :: LogLevel -> String -> m ()
   runShellCommand
     :: Maybe String                 -- ^ Optional path to the working directory
     -> Command                      -- ^ The command to execute
@@ -52,10 +56,15 @@ class Monad m => MonadExec m where
   putErrLn :: String -> m ()
 
 instance MonadExec IO where
-  zzLog textColor logEntry = putDoc (annotate style doc)
+  zzLog logLevel logEntry = hPutDoc handle (annotate style doc)
    where
     doc = "ZZ>" <+> pretty logEntry <> hardline
-    style = color textColor
+    handle
+      | Info <- logLevel = stdout
+      | Error <- logLevel = stderr
+    style
+      | Info <- logLevel = color Green
+      | Error <- logLevel = color Red
 
   runShellCommand workdir Command{cmdFilename, cmdArgs} =
     readCreateProcessWithExitCode createProcess ""
@@ -81,7 +90,7 @@ inject code validation =
   case validation of
     Success res -> return res
     Failure errors -> do
-      zzLog Red (buildErrorMsg errors)
+      zzLog Error (buildErrorMsg errors)
       throwError code
 
 dynSubstDelimiters = ("«", "»")
@@ -108,7 +117,7 @@ runStep :: (MonadExec m, MonadError ExitCode m)
 runStep builderWorkdir ctxt (SetPropertyFromValue prop value) =
   return $ Map.insert prop value ctxt
 runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
-  zzLog Green (show cmd)
+  zzLog Info (show cmd)
   (rc, outmsg, errmsg) <- runShellCommand (workdir <|> builderWorkdir) cmd
   unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
   unless (null errmsg) $ putErrLn errmsg -- show step error output, if any
@@ -118,7 +127,7 @@ runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
       return ctxt
     _ -> do
       -- step failed, execution will stop
-      zzLog Red (show cmd ++ " failed: " ++ show rc)
+      zzLog Error (show cmd ++ " failed: " ++ show rc)
       throwError rc
 
 runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder -> m ()

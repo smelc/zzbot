@@ -13,7 +13,7 @@ import Test.Hspec
 -- Logging mock exec
 
 data LogEntry
-  = Message Color String
+  = Message LogLevel String
   | StdOut String
   | StdErr String
   deriving (Eq, Show)
@@ -26,7 +26,7 @@ runLoggingMockExec (LoggingMockExec m) = runWriter m
 
 instance MonadExec LoggingMockExec where
 
-  zzLog color entry = tell [Message color entry]
+  zzLog level entry = tell [Message level entry]
 
   runShellCommand _ (Command "ls" ["a"]) = return (ExitSuccess, "foo bar", "")
   runShellCommand _ (Command "ls" ["b"]) = return (ExitSuccess, "bar baz", "")
@@ -75,13 +75,13 @@ spec =
         ]
     expectedOutput =
       ( Left (ExitFailure 127)
-      , [ Message Green "ls a"
+      , [ Message Info "ls a"
         , StdOut "foo bar"
-        , Message Green "ls b"
+        , Message Info "ls b"
         , StdOut "bar baz"
-        , Message Green "some junk"
+        , Message Info "some junk"
         , StdErr "command not found"
-        , Message Red "some junk failed: ExitFailure 127"
+        , Message Error "some junk failed: ExitFailure 127"
         ]
       )
     expectedTrace =
