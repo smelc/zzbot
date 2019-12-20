@@ -131,7 +131,7 @@ runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
     _ -> do
       -- step failed, execution will stop
       zzLog Error (show cmd ++ " failed: " ++ show rc)
-      throwError rc
+      throwError subprocessErrorCode
 
 runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder -> m ()
 runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
