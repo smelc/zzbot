@@ -92,6 +92,9 @@ inject code validation =
     Failure errors -> do
       zzLog Error (buildErrorMsg errors)
       throwError code
+ where
+  buildErrorMsg :: Show a => Set.Set a -> String
+  buildErrorMsg errors = unlines $ map show $ Set.toList errors
 
 dynSubstDelimiters = ("«", "»")
 
@@ -133,8 +136,6 @@ runStep builderWorkdir ctxt (ShellCmd workdir cmd) = do
 runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder -> m ()
 runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
 
-buildErrorMsg :: Show a => Set.Set a -> String
-buildErrorMsg errors = unlines $ map show $ Set.toList errors
 
 process
   :: (MonadExec m, MonadError ExitCode m)
