@@ -4,6 +4,7 @@ module Main where
 
 import Config
 import Control.Applicative
+import Control.Monad.Except
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
@@ -34,5 +35,7 @@ main = do
   Options{optFilenames, optPrint} <- Opt.execParser optionsParserInfo
   env <- getEnvironment
   xmls <- traverse readFile optFilenames
-  codes <- traverse (process optPrint env) xmls
-  exitWith $ maximum codes
+  res <- runExceptT $ traverse (process optPrint env) xmls
+  case res of
+    Left code -> exitWith code
+    _ -> return ()

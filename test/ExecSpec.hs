@@ -74,7 +74,7 @@ spec =
         , ShellCmd Nothing (Command "some" ["junk"])
         ]
     expectedOutput =
-      ( Left (ExecutionError Nothing (ExitFailure 127))
+      ( Left (ExitFailure 127)
       , [ Message Green "ls a"
         , StdOut "foo bar"
         , Message Green "ls b"
