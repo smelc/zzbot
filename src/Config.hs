@@ -42,7 +42,10 @@ data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
 
 data Step
     = SetPropertyFromValue { prop :: String, value :: String }
-    | ShellCmd             { workdir :: Maybe String, cmd :: Command }
+    | ShellCmd             { workdir :: Maybe String,
+                             cmd :: Command,
+                             mprop :: Maybe String -- ^ The build property to set (if any) from the command's output
+                           }
   deriving (Eq, Show)
 
 data Builder = Builder { workdir :: Maybe String, name :: String, steps :: [Step] }
@@ -176,8 +179,10 @@ attr =? Just value = attr =: value
 instance ToXml Step where
     toXml (SetPropertyFromValue prop value) =
       Element "setProperty" ("property" =: prop <> "value" =: value) []
-    toXml (ShellCmd workdir cmd) =
-      Element "shell" ("command" =: show cmd <> "workdir" =? workdir) []
+    toXml (ShellCmd workdir cmd mprop) =
+      Element "shell" (   "command" =: show cmd
+                       <> "workdir" =? workdir
+                       <> "property" =? mprop) []
 
 instance ToXml Builder where
     toXml (Builder workdir name steps) =
@@ -223,10 +228,11 @@ instance Substable Command where
 instance Substable Step where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
-  substitute delimiters subst (ShellCmd workdir cmd) =
+  substitute delimiters subst (ShellCmd workdir cmd mprop) =
     ShellCmd
       <$> traverse (applySubstitution delimiters subst) workdir
       <*> substitute delimiters subst cmd
+      <*> Success mprop
 
 instance Substable Builder where
   substitute delimiters subst (Builder workdir name steps) =

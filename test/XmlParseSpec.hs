@@ -116,7 +116,7 @@ expectedResultForValidXml = Success config
       { workdir = Just "dir1"
       , name = "ls builder"
       , steps =
-        [ ShellCmd { workdir = Just "dir2", cmd = Command "ls" ["/"] }
+        [ ShellCmd { workdir = Just "dir2", cmd = Command "ls" ["/"], mprop = Nothing }
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }

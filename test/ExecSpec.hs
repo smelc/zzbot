@@ -69,9 +69,9 @@ spec =
       Builder
         (Just "dir1")
         "test"
-        [ ShellCmd Nothing (Command "ls" ["a"])
-        , ShellCmd (Just "dir2") (Command "ls" ["b"])
-        , ShellCmd Nothing (Command "some" ["junk"])
+        [ ShellCmd Nothing (Command "ls" ["a"]) Nothing
+        , ShellCmd (Just "dir2") (Command "ls" ["b"]) Nothing
+        , ShellCmd Nothing (Command "some" ["junk"]) Nothing
         ]
     expectedOutput =
       ( Left (ExitFailure 3)

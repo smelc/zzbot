@@ -111,8 +111,9 @@ zxmlToSetPropertyFromValue zxml = do
 zxmlToShellCmd :: ZXML -> XmlValidation Step
 zxmlToShellCmd zxml@ZElem {maybeLine} = do
   let workdir = lookupAttrValue zxml "workdir"
+      mprop = lookupAttrValue zxml "property"
   cmd <- parseAttrValue zxml "command" (parseCommand . words)
-  return (ShellCmd workdir cmd)
+  return (ShellCmd workdir cmd mprop)
  where
   parseCommand [] = failWith (EmptyCommand maybeLine)
   parseCommand (filepath:args) = pure (Command filepath args)
