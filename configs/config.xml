@@ -13,7 +13,7 @@
     <setProperty property="home" value="«home»/${USER}"/>
     <shell command="echo «home»"/>
     <!-- Let's build 'home' with a command -->
-    <setPropertyFromCommand property="homeprop" command="echo $HOME"/>
+    <setPropertyFromCommand property="homeprop" command="echo ${HOME}"/>
     <shell command="echo «homeprop»"/>
   </builder>
 </config>

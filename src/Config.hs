@@ -176,13 +176,17 @@ attr =: value = Map.singleton (simpleName attr) (T.pack value)
 attr =? Nothing = Map.empty
 attr =? Just value = attr =: value
 
+-- TODO Those strings should not be hardcoded here. They should be moved out from XmlParse
+-- into a new file, on which this file could depend; without introducing an imports cycle
 instance ToXml Step where
     toXml (SetPropertyFromValue prop value) =
       Element "setProperty" ("property" =: prop <> "value" =: value) []
     toXml (ShellCmd workdir cmd mprop) =
-      Element "shell" (   "command" =: show cmd
-                       <> "workdir" =? workdir
-                       <> "property" =? mprop) []
+      Element tag ("command" =: show cmd
+                  <> "workdir" =? workdir
+                  <> "property" =? mprop) []
+      where tag = case mprop of Nothing -> "shell"
+                                Just _  -> "setPropertyFromCommand"
 
 instance ToXml Builder where
     toXml (Builder workdir name steps) =

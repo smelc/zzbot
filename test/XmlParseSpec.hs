@@ -15,32 +15,32 @@ import qualified Data.Set as Set
 import qualified Test.Hspec.QuickCheck as QuickCheck
 
 badXml1 = "<config><builder name=\"foo\"/><foobar></foobar></config>"
-expectedResultForBadXml1 = failWith (UnexpectedTag ["builder", "substitution"] "foobar" (Just 1))
+expectedResultForBadXml1 = failWith (UnexpectedTag [tBuilder, "substitution"] "foobar" (Just 1))
 
 badXml2 = "<config><builder></builder></config>"
-expectedResultForBadXml2 = failWith (MissingAttribute "builder" "name" (Just 1))
+expectedResultForBadXml2 = failWith (MissingAttribute tBuilder "name" (Just 1))
 
 badXml3 = "<config><builder name=\"foo\"><foobar/></builder></config>"
-expectedResultForBadXml3 = failWith (UnexpectedTag ["setProperty", "shell"] "foobar" (Just 1))
+expectedResultForBadXml3 = failWith (UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] "foobar" (Just 1))
 
 badXml4 = "<config><builder name=\"foo\"><shell/></builder></config>"
-expectedResultForBadXml4 = failWith (MissingAttribute "shell" "command" (Just 1))
+expectedResultForBadXml4 = failWith (MissingAttribute tShell "command" (Just 1))
 
 badXml5 = "<config><builder name=\"foo\"><setProperty value=\"bar\"/></builder></config>"
-expectedResultForBadXml5 =failWith (MissingAttribute "setProperty" "property" (Just 1))
+expectedResultForBadXml5 =failWith (MissingAttribute tSetProperty aProperty (Just 1))
 
 badXml6 = "<config><builder name=\"foo\"><setProperty property=\"foo\"/></builder></config>"
-expectedResultForBadXml6 = failWith (MissingAttribute "setProperty" "value" (Just 1))
+expectedResultForBadXml6 = failWith (MissingAttribute tSetProperty aValue (Just 1))
 
 badXml7 = "<config>\n<builder>\n<shell/>\n<setProperty/>\n<unknown/>\n</builder>\n</config>"
 expectedResultForBadXml7 =
   Failure $
     Set.fromList
-      [ UnexpectedTag ["setProperty", "shell"] "unknown" (Just 5)
-      , MissingAttribute "builder" "name" (Just 2)
-      , MissingAttribute "shell" "command" (Just 3)
-      , MissingAttribute "setProperty" "property" (Just 4)
-      , MissingAttribute "setProperty" "value" (Just 4)
+      [ UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] "unknown" (Just 5)
+      , MissingAttribute tBuilder "name" (Just 2)
+      , MissingAttribute tShell "command" (Just 3)
+      , MissingAttribute tSetProperty aProperty (Just 4)
+      , MissingAttribute tSetProperty aValue (Just 4)
       ]
 
 badXml8 = ""
@@ -74,7 +74,7 @@ expectedResultForBadXml12 =
     Set.fromList
       [ NoBuilder (Just 1)
       , MissingAttribute "entry" "name" (Just 1)
-      , MissingAttribute "entry" "value" (Just 1)
+      , MissingAttribute "entry" aValue (Just 1)
       ]
 
 badXml13 =
@@ -85,7 +85,7 @@ badXml13 =
   \  </substitution>\
   \</config>"
 expectedResultForBadXml13 =
-  failWith (MissingAttribute "entry" "value" (Just 1))
+  failWith (MissingAttribute "entry" aValue (Just 1))
 
 badXml14 =
   "<config>\
@@ -96,6 +96,14 @@ badXml14 =
   \</config>"
 expectedResultForBadXml14 =
   failWith (MissingAttribute "entry" "name" (Just 1))
+
+badXml15 =
+  "<config>\n\
+  \  <builder name=\"foo\">\n\
+  \    <shell command=\"ls\" property=\"prop\"/>\n\
+  \  </builder>\n\
+  \</config>"
+expectedResultForBadXml15 = Failure $ Set.fromList [ ShellAndProperty (Just 3) ]
 
 validXml =
   "<config>\
@@ -156,4 +164,6 @@ spec =
       parseXmlString badXml13 `shouldBe` expectedResultForBadXml13
     it "should fail on missing name in entry" $
       parseXmlString badXml14 `shouldBe` expectedResultForBadXml14
+    it "should fail on invalid '<shell> + property attribute' combination" $
+      parseXmlString badXml15 `shouldBe` expectedResultForBadXml15
 

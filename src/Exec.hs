@@ -120,7 +120,9 @@ runStep :: (MonadExec m, MonadError ExitCode m)
 runStep builderWorkdir ctxt (SetPropertyFromValue prop value) =
   return $ Map.insert prop value ctxt
 runStep builderWorkdir ctxt (ShellCmd workdir cmd mprop) = do
-  zzLog Info (show cmd)
+  let infoSuffix :: String = case mprop of Nothing -> ""
+                                           Just prop -> " → " ++ prop
+  zzLog Info (show cmd ++ infoSuffix)
   (rc, outmsg, errmsg) <- runShellCommand (workdir <|> builderWorkdir) cmd
   unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
   unless (null errmsg) $ putErrLn errmsg -- show step error output, if any

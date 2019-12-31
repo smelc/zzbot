@@ -3,9 +3,15 @@
 {-# LANGUAGE ApplicativeDo #-}
 
 module XmlParse (
-    failWith
+  aProperty
+  , aValue
+  , failWith
   , parseXmlFile
   , parseXmlString
+  , tBuilder
+  , tSetProperty
+  , tSetPropertyFromCommand
+  , tShell
   , XmlParsingError(..)
   , XmlValidation
 ) where
@@ -19,6 +25,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
 import System.IO
+import Text.Printf
 import Text.XML.Light.Types
 
 import qualified Data.List.NonEmpty as NE
@@ -32,10 +39,16 @@ import Config
 -- Parsing of XML to create instances of Builder --
 ---------------------------------------------------
 
+-- Attributes
+aProperty = "property"
+aValue = "value"
+
+-- Tags
 tBuilder, tSetProperty, tShell, tConfig :: String
 tBuilder = "builder"
 tEntry = "entry"
 tSetProperty = "setProperty"
+tSetPropertyFromCommand = "setPropertyFromCommand"
 tShell = "shell"
 tSubstitution = "substitution"
 tConfig = "config"
@@ -55,6 +68,8 @@ data XmlParsingError
   | MissingAttribute String String (Maybe Line)
   | NoBuilder (Maybe Line)
   | NoRootElement
+  | ShellAndProperty (Maybe Line)
+  | SetPropertyFromCmdWithoutProperty (Maybe Line)
   | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
@@ -70,6 +85,8 @@ instance Show XmlParsingError where
     giveLineInMsg
       ("Missing attribute in element " ++ elem ++ ": " ++ attr)
       line
+  show (ShellAndProperty line) = giveLineInMsg (printf "<%s> should not feature the \"%s\" attribute" tShell aProperty) line
+  show (SetPropertyFromCmdWithoutProperty line) = giveLineInMsg (printf "<%s> must feature the \"%s\" attribute" tSetPropertyFromCommand aProperty) line
   show (UnexpectedTag expected actual line) =
     giveLineInMsg
       ("Expected one of " ++ intercalate ", " expected ++ ", got " ++ actual)
@@ -104,14 +121,26 @@ lookupAttrValue zxml@ZElem {attrs} attr = lookup attr attrs
 
 zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
 zxmlToSetPropertyFromValue zxml = do
-  propArg <- getAttrValue zxml "property"
-  valueArg <- getAttrValue zxml "value"
+  propArg <- getAttrValue zxml aProperty
+  valueArg <- getAttrValue zxml aValue
   return $ SetPropertyFromValue propArg valueArg
 
-zxmlToShellCmd :: ZXML -> XmlValidation Step
-zxmlToShellCmd zxml@ZElem {maybeLine} = do
+data ShellOrSetPropFromCmd = Shell | SetPropertyFromCommand
+
+validateShellOrSetPropFromCmd :: ShellOrSetPropFromCmd -- ^ Whether the XML is <shell> or <setPropertyFromCommand>
+                              -> Maybe String                  -- ^ The (optional) value of the "property" attribute
+                              -> Maybe Line                    -- ^ The (optional) line of the XML considered
+                              -> XmlValidation ()
+validateShellOrSetPropFromCmd Shell Nothing _ = Success ()
+validateShellOrSetPropFromCmd SetPropertyFromCommand (Just _) _ = Success ()
+validateShellOrSetPropFromCmd Shell (Just _) maybeLine = failWith $ ShellAndProperty maybeLine
+validateShellOrSetPropFromCmd SetPropertyFromCommand Nothing maybeLine = failWith $ SetPropertyFromCmdWithoutProperty maybeLine
+
+zxmlToShellCmd :: ZXML -> ShellOrSetPropFromCmd -> XmlValidation Step
+zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
   let workdir = lookupAttrValue zxml "workdir"
       mprop = lookupAttrValue zxml "property"
+  validateShellOrSetPropFromCmd shellOrSetPropertyFromCmd mprop maybeLine
   cmd <- parseAttrValue zxml "command" (parseCommand . words)
   return (ShellCmd workdir cmd mprop)
  where
@@ -121,8 +150,9 @@ zxmlToShellCmd zxml@ZElem {maybeLine} = do
 parseStep :: ZXML -> XmlValidation Step
 parseStep zxml@ZElem {tag, maybeLine}
   | tag == tSetProperty = zxmlToSetPropertyFromValue zxml
-  | tag == tShell       = zxmlToShellCmd zxml
-  | otherwise = failWith (UnexpectedTag [tSetProperty, tShell] tag maybeLine)
+  | tag == tSetPropertyFromCommand = zxmlToShellCmd zxml SetPropertyFromCommand
+  | tag == tShell                  = zxmlToShellCmd zxml Shell
+  | otherwise = failWith (UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] tag maybeLine)
 
 zXMLToBuilder :: ZXML -> XmlValidation Builder
 zXMLToBuilder zxml@ZElem {children} = do
