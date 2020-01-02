@@ -1,5 +1,8 @@
 html/
 
+# doc
+doc/build/index.html
+
 # stack
 .stack-work
 stack.yaml.lock
