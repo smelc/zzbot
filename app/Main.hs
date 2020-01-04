@@ -9,6 +9,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
 import Exec
+import System.Directory
 import System.Environment
 import System.Exit
 import XmlParse
@@ -33,9 +34,10 @@ optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 main :: IO ()
 main = do
   Options{optFilenames, optPrint} <- Opt.execParser optionsParserInfo
-  env <- getEnvironment
+  workdir <- getCurrentDirectory
+  sysenv <- getEnvironment
   xmls <- traverse readFile optFilenames
-  res <- runExceptT $ traverse (process optPrint env) xmls
+  res <- runExceptT $ traverse (process optPrint (ProcessEnv workdir sysenv)) xmls
   case res of
     Left code -> exitWith code
     _ -> return ()

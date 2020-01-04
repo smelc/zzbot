@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Config (
@@ -12,6 +13,7 @@ module Config (
   , ConfigValidation
   , Command(..)
   , duplicates
+  , normalize
   , parseVars
   , renderAsXml
   , splitAround
@@ -272,3 +274,20 @@ substAll :: [(String, String)]
          -> ConfigValidation Config
 substAll env config =
   substSquare config `bindValidation` substEnv env
+
+normalize :: FilePath -- ^ The working directory
+          -> Config -- ^ The input configuration
+          -> Config
+normalize workdir Config{builders, subst} =
+  Config builders' subst
+  where builders' = NE.map normalizeBuilder builders
+        normalizeBuilder :: Builder -> Builder
+        normalizeBuilder Builder{workdir=mworkdir, name, steps} =
+          Builder (or mworkdir workdir) name (map normalizeStep steps)
+        normalizeStep :: Step -> Step
+        normalizeStep res@SetPropertyFromValue{..} = res
+        normalizeStep ShellCmd{workdir=mworkdir, cmd, mprop} = ShellCmd (or mworkdir workdir) cmd mprop
+        or :: Maybe a -> a -> Maybe a
+        or Nothing a = Just a
+        or res _ = res
+        

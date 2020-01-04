@@ -1,17 +1,44 @@
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module ConfigSpec (spec) where
 
 import Data.List
+import Data.Maybe
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Modifiers
+
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Validation as V
 
 import Config hiding (prop)
+
+testNormalize :: SpecWith ()
+testNormalize =
+  describe "normalize sets the workdir of all builders and all commands" $ do
+    it "builderHasAllWorkdirs fails on a builder without a top-level workdir" $
+      builderHasAllWorkdirs builder `shouldBe` False
+    it "stepHasWorkdir fails on a step without a workdir" $
+      stepHasWorkdir (ShellCmd Nothing (Command "ls" []) Nothing) `shouldBe` False
+    it "(normalize config) -> config' yields config' with all workdirs set" $
+      allWorkdirsSet (normalize "some workdir" config) `shouldBe` True
+ where config = Config (builder NE.:| []) []
+       builder = Builder Nothing "builder"
+                  [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
+                  , ShellCmd Nothing (Command "ls" []) Nothing
+                  ]
+       allWorkdirsSet :: Config -> Bool
+       allWorkdirsSet Config{builders} = all builderHasAllWorkdirs builders
+       builderHasAllWorkdirs :: Builder -> Bool
+       builderHasAllWorkdirs Builder{workdir, steps} = isJust workdir && all stepHasWorkdir steps
+       stepHasWorkdir :: Step -> Bool
+       stepHasWorkdir SetPropertyFromValue{..} = True
+       stepHasWorkdir ShellCmd{workdir} = isJust workdir
 
 testParseVars =
   describe "parseVars" $ do
@@ -94,6 +121,7 @@ testSubstitute = do
 
 
 spec = do
+  testNormalize
   testParseVars
   testSplitAround
   testSplitDelimiters

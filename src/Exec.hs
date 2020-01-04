@@ -5,7 +5,8 @@
 
 -- File to execute a build specified as a Builder
 module Exec
-  ( MonadExec(..)
+  ( ProcessEnv(..)
+  , MonadExec(..)
   , LogLevel(..)
   , runBuild
   , process
@@ -28,7 +29,6 @@ import System.Process
 import Config
 import XmlParse
 
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text.Lazy as LT
@@ -140,16 +140,20 @@ runStep builderWorkdir ctxt (ShellCmd workdir cmd mprop) = do
 runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder -> m ()
 runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
 
+data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
+                               sysenv :: [(String, String)] -- ^ The system's environment
+                             }
 
 process
   :: (MonadExec m, MonadError ExitCode m)
   => Bool -- ^ Whether to print (True) or execute the builder (False)
-  -> [(String, String)] -- ^ The environment
+  -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> m ()
 process printOnly env xml = do
   config <- inject parsingErrorCode (parseXmlString xml)
-  sconfig@Config{builders} <- inject substitutionErrorCode (substAll env config)
+  let config' = normalize (Exec.workdir env) config
+  sconfig@Config{builders} <- inject substitutionErrorCode (substAll (sysenv env) config')
   if printOnly
     then putOutLn (LT.unpack $ renderAsXml sconfig)
     else traverse_ runBuild builders
