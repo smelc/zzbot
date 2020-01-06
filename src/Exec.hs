@@ -102,7 +102,7 @@ dynSubstDelimiters = ("«", "»")
 runSteps
   :: (MonadExec m, MonadError ExitCode m)
   => BuildContext
-  -> [Step Normalized]
+  -> [Step Substituted]
   -> m ()
 runSteps ctxt [] = return ()
 runSteps ctxt (step:steps) = do
@@ -114,7 +114,7 @@ runSteps ctxt (step:steps) = do
 
 runStep :: (MonadExec m, MonadError ExitCode m)
         => BuildContext
-        -> Step Normalized -- ^ The step to execute
+        -> Step Substituted -- ^ The step to execute
         -> m BuildContext
 runStep ctxt (SetPropertyFromValue prop value) =
   return $ Map.insert prop value ctxt
@@ -136,8 +136,8 @@ runStep ctxt (ShellCmd workdir cmd mprop) = do
       zzLog Error (show cmd ++ " failed: " ++ show rc)
       throwError subprocessErrorCode
 
-runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Normalized -> m ()
-runBuild (Builder workdir _ steps) = runSteps Map.empty steps
+runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
+runBuild (Builder () _ steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
