@@ -39,7 +39,7 @@ instance MonadExec LoggingMockExec where
 
 -- Tracing mock exec
 
-data Execution = Execution (Maybe String) Command
+data Execution = Execution String Command
   deriving (Eq, Show)
 
 newtype TracingMockExec a = TracingMockExec (Writer [Execution] a)
@@ -67,11 +67,11 @@ spec =
   where
     testBuilder =
       Builder
-        (Just "dir1")
+        ()
         "test"
-        [ ShellCmd Nothing (Command "ls" ["a"]) Nothing
-        , ShellCmd (Just "dir2") (Command "ls" ["b"]) Nothing
-        , ShellCmd Nothing (Command "some" ["junk"]) Nothing
+        [ ShellCmd "dir1" (Command "ls" ["a"]) Nothing
+        , ShellCmd "dir2" (Command "ls" ["b"]) Nothing
+        , ShellCmd "dir1" (Command "some" ["junk"]) Nothing
         ]
     expectedOutput =
       ( Left (ExitFailure 3)
@@ -86,8 +86,8 @@ spec =
       )
     expectedTrace =
       ( Right ()
-      , [ Execution (Just "dir1") (Command "ls" ["a"])
-        , Execution (Just "dir2") (Command "ls" ["b"])
-        , Execution (Just "dir1") (Command "some" ["junk"])
+      , [ Execution "dir1" (Command "ls" ["a"])
+        , Execution "dir2" (Command "ls" ["b"])
+        , Execution "dir1" (Command "some" ["junk"])
         ]
       )

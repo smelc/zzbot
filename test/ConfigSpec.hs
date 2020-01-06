@@ -1,6 +1,6 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 module ConfigSpec (spec) where
 
@@ -17,28 +17,6 @@ import qualified Data.Set as Set
 import qualified Data.Validation as V
 
 import Config hiding (prop)
-
-testNormalize :: SpecWith ()
-testNormalize =
-  describe "normalize sets the workdir of all builders and all commands" $ do
-    it "builderHasAllWorkdirs fails on a builder without a top-level workdir" $
-      builderHasAllWorkdirs builder `shouldBe` False
-    it "stepHasWorkdir fails on a step without a workdir" $
-      stepHasWorkdir (ShellCmd Nothing (Command "ls" []) Nothing) `shouldBe` False
-    it "(normalize config) -> config' yields config' with all workdirs set" $
-      allWorkdirsSet (normalize "some workdir" config) `shouldBe` True
- where config = Config (builder NE.:| []) []
-       builder = Builder Nothing "builder"
-                  [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-                  , ShellCmd Nothing (Command "ls" []) Nothing
-                  ]
-       allWorkdirsSet :: Config -> Bool
-       allWorkdirsSet Config{builders} = all builderHasAllWorkdirs builders
-       builderHasAllWorkdirs :: Builder -> Bool
-       builderHasAllWorkdirs Builder{workdir, steps} = isJust workdir && all stepHasWorkdir steps
-       stepHasWorkdir :: Step -> Bool
-       stepHasWorkdir SetPropertyFromValue{..} = True
-       stepHasWorkdir ShellCmd{workdir} = isJust workdir
 
 testParseVars =
   describe "parseVars" $ do
@@ -103,15 +81,15 @@ testSubstitute = do
       substitute ("(", ")") badSubst builder `shouldBe` V.Failure expectedErrors
  where
   builder =
-    Builder (Just "(a)") "builder"
+    Builder @Normalized () "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-      , ShellCmd (Just "(b)") (Command "ls" ["(a)", "(b)"]) Nothing
+      , ShellCmd "(b)" (Command "ls" ["(a)", "(b)"]) Nothing
       ]
   goodSubst = [("a", "xx"), ("b", "yy")]
   expectedSuccess =
-    Builder (Just "xx") "builder"
+    Builder () "builder"
       [ SetPropertyFromValue "prop" "fooxxbaryybaz"
-      , ShellCmd (Just "yy") (Command "ls" ["xx", "yy"]) Nothing
+      , ShellCmd "yy" (Command "ls" ["xx", "yy"]) Nothing
       ]
   badSubst = [("c", "xx")]
   expectedErrors = Set.fromList
@@ -121,7 +99,6 @@ testSubstitute = do
 
 
 spec = do
-  testNormalize
   testParseVars
   testSplitAround
   testSplitDelimiters
