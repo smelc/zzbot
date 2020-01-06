@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DataKinds #-}
 
 -- File to execute a build specified as a Builder
 module Exec
@@ -49,7 +50,7 @@ data LogLevel = Info | Error
 class Monad m => MonadExec m where
   zzLog :: LogLevel -> String -> m ()
   runShellCommand
-    :: Maybe String                 -- ^ Optional path to the working directory
+    :: String                 -- ^ Optional path to the working directory
     -> Command                      -- ^ The command to execute
     -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
   putOutLn :: String -> m ()
@@ -69,7 +70,7 @@ instance MonadExec IO where
   runShellCommand workdir Command{cmdFilename, cmdArgs} =
     readCreateProcessWithExitCode createProcess ""
    where
-    createProcess = (proc cmdFilename cmdArgs) { cwd = workdir }
+    createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
 
   putOutLn = putStrLn
 
@@ -100,30 +101,28 @@ dynSubstDelimiters = ("«", "»")
 
 runSteps
   :: (MonadExec m, MonadError ExitCode m)
-  => Maybe String
-  -> BuildContext
-  -> [Step]
+  => BuildContext
+  -> [Step Normalized]
   -> m ()
-runSteps _ ctxt [] = return ()
-runSteps builderWorkdir ctxt (step:steps) = do
+runSteps ctxt [] = return ()
+runSteps ctxt (step:steps) = do
   step' <- inject
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList ctxt) step)
-  ctxt' <- runStep builderWorkdir ctxt step'
-  runSteps builderWorkdir ctxt' steps
+  ctxt' <- runStep ctxt step'
+  runSteps ctxt' steps
 
 runStep :: (MonadExec m, MonadError ExitCode m)
-        => Maybe String -- ^ The builder's workdir, if any
-        -> BuildContext
-        -> Step         -- ^ The step to execute
+        => BuildContext
+        -> Step Normalized -- ^ The step to execute
         -> m BuildContext
-runStep builderWorkdir ctxt (SetPropertyFromValue prop value) =
+runStep ctxt (SetPropertyFromValue prop value) =
   return $ Map.insert prop value ctxt
-runStep builderWorkdir ctxt (ShellCmd workdir cmd mprop) = do
+runStep ctxt (ShellCmd workdir cmd mprop) = do
   let infoSuffix :: String = case mprop of Nothing -> ""
                                            Just prop -> " → " ++ prop
   zzLog Info (show cmd ++ infoSuffix)
-  (rc, outmsg, errmsg) <- runShellCommand (workdir <|> builderWorkdir) cmd
+  (rc, outmsg, errmsg) <- runShellCommand workdir cmd
   unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
   unless (null errmsg) $ putErrLn errmsg -- show step error output, if any
   case rc of
@@ -137,8 +136,8 @@ runStep builderWorkdir ctxt (ShellCmd workdir cmd mprop) = do
       zzLog Error (show cmd ++ " failed: " ++ show rc)
       throwError subprocessErrorCode
 
-runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder -> m ()
-runBuild (Builder workdir _ steps) = runSteps workdir Map.empty steps
+runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Normalized -> m ()
+runBuild (Builder workdir _ steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment

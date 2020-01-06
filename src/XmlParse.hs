@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE DataKinds #-}
 
 module XmlParse (
   aProperty
@@ -119,7 +120,7 @@ getAttrValue zxml attr = parseAttrValue zxml attr pure
 lookupAttrValue :: ZXML -> String -> Maybe String
 lookupAttrValue zxml@ZElem {attrs} attr = lookup attr attrs
 
-zxmlToSetPropertyFromValue :: ZXML -> XmlValidation Step
+zxmlToSetPropertyFromValue :: ZXML -> XmlValidation (Step Parsed)
 zxmlToSetPropertyFromValue zxml = do
   propArg <- getAttrValue zxml aProperty
   valueArg <- getAttrValue zxml aValue
@@ -136,7 +137,7 @@ validateShellOrSetPropFromCmd SetPropertyFromCommand (Just _) _ = Success ()
 validateShellOrSetPropFromCmd Shell (Just _) maybeLine = failWith $ ShellAndProperty maybeLine
 validateShellOrSetPropFromCmd SetPropertyFromCommand Nothing maybeLine = failWith $ SetPropertyFromCmdWithoutProperty maybeLine
 
-zxmlToShellCmd :: ZXML -> ShellOrSetPropFromCmd -> XmlValidation Step
+zxmlToShellCmd :: ZXML -> ShellOrSetPropFromCmd -> XmlValidation (Step Parsed)
 zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
   let workdir = lookupAttrValue zxml "workdir"
       mprop = lookupAttrValue zxml "property"
@@ -147,21 +148,21 @@ zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
   parseCommand [] = failWith (EmptyCommand maybeLine)
   parseCommand (filepath:args) = pure (Command filepath args)
 
-parseStep :: ZXML -> XmlValidation Step
+parseStep :: ZXML -> XmlValidation (Step Parsed)
 parseStep zxml@ZElem {tag, maybeLine}
   | tag == tSetProperty = zxmlToSetPropertyFromValue zxml
   | tag == tSetPropertyFromCommand = zxmlToShellCmd zxml SetPropertyFromCommand
   | tag == tShell                  = zxmlToShellCmd zxml Shell
   | otherwise = failWith (UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] tag maybeLine)
 
-zXMLToBuilder :: ZXML -> XmlValidation Builder
+zXMLToBuilder :: ZXML -> XmlValidation (Builder Parsed)
 zXMLToBuilder zxml@ZElem {children} = do
   let workdir = lookupAttrValue zxml "workdir"
   name <- getAttrValue zxml "name"
   steps <- traverse parseStep children
   return $ Builder workdir name steps
 
-zXMLsToBuilders :: Maybe Line -> [ZXML] -> XmlValidation (NonEmpty Builder)
+zXMLsToBuilders :: Maybe Line -> [ZXML] -> XmlValidation (NonEmpty (Builder Parsed))
 zXMLsToBuilders maybeLine zxmls =
   case NE.nonEmpty zxmls of
     Just nonEmptyXmls -> traverse zXMLToBuilder nonEmptyXmls
@@ -202,7 +203,7 @@ sortConfigChildren = foldMap inject
     | tag == tSubstitution = ConfigChildren [zxml] [] []
     | otherwise = ConfigChildren [] [] [zxml]
 
-zXMLToConfig :: ZXML -> XmlValidation Config
+zXMLToConfig :: ZXML -> XmlValidation (Config Parsed)
 zXMLToConfig zxml@ZElem {tag, children, maybeLine}
   | tag == tConfig = do
       traverse_ unknownTag otherXmls
@@ -232,13 +233,13 @@ textXMLToZXML (Elem Element {elName, elAttribs, elContent, elLine}) = do
 
 parseXmlString
   :: String               -- ^ The XML Content
-  -> XmlValidation Config -- ^ Either an error message, or the builders decoded from XML
+  -> XmlValidation (Config Parsed) -- ^ Either an error message, or the builders decoded from XML
 parseXmlString str =
   case XmlInput.parseXMLDoc str of
     Nothing -> failWith NoRootElement
     Just elem -> transform $ Elem elem
   where
-  transform :: Content -> XmlValidation Config
+  transform :: Content -> XmlValidation (Config Parsed)
   transform xml =
     textXMLToZXML xml
       `bindValidation` fromJustZXml
@@ -246,7 +247,7 @@ parseXmlString str =
 
 parseXmlFile
   :: String                    -- ^ A filename
-  -> IO (XmlValidation Config) -- ^ The builders
+  -> IO (XmlValidation (Config Parsed)) -- ^ The builders
 parseXmlFile filepath = do
     handle :: Handle <- openFile filepath ReadMode
     contents :: String <- hGetContents handle
