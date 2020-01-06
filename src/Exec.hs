@@ -137,7 +137,7 @@ runStep ctxt (ShellCmd workdir cmd mprop) = do
       throwError subprocessErrorCode
 
 runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Normalized -> m ()
-runBuild (Builder workdir _ steps) = runSteps Map.empty steps
+runBuild (Builder () _ steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment

@@ -217,7 +217,7 @@ instance ToXml (Step Normalized) where
                                 Just _  -> "setPropertyFromCommand"
 
 instance ToXml (Builder Normalized) where
-    toXml (Builder workdir name steps) =
+    toXml (Builder () name steps) =
       Element "builder" Map.empty (map (NodeElement . toXml) steps)
 
 instance ToXml Subst where
@@ -267,7 +267,7 @@ instance Substable (Step Normalized) where
       <*> Success mprop
 
 instance Substable (Builder Normalized) where
-  substitute delimiters subst (Builder workdir name steps) =
+  substitute delimiters subst (Builder () name steps) =
     Builder ()
       <$> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps
