@@ -33,6 +33,7 @@ import Data.Either
 import Data.List
 import Data.Maybe
 import Data.Validation
+import System.FilePath
 import Text.Printf
 import Text.XML
 
@@ -325,4 +326,7 @@ normalize workdir Config{builders, subst} =
           Builder () name (map (normalizeStep (fromMaybe workdir mworkdir)) steps)
         normalizeStep :: String -> Step Parsed -> Step Normalized
         normalizeStep _ SetPropertyFromValue{prop, value} = SetPropertyFromValue{prop, value}
-        normalizeStep newWorkDir ShellCmd{workdir=mworkdir, cmd, mprop} = ShellCmd (fromMaybe newWorkDir mworkdir) cmd mprop
+        normalizeStep defaultWorkdir ShellCmd{workdir=mworkdir, cmd, mprop} =
+          ShellCmd sworkdir' cmd mprop
+          where sworkdir = fromMaybe defaultWorkdir mworkdir -- take default workdir if Step doesn't specify one
+                sworkdir' = if isAbsolute sworkdir then sworkdir else defaultWorkdir </> sworkdir -- make it absolute

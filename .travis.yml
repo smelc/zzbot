@@ -43,5 +43,6 @@ script:
 - stack exec haddock -- --html $(find src -name \*.hs) -o html
 # Execute on a versioned config
 - stack exec zzbot -- configs/config.xml
-# Test --print on a versioned config
+# Test --print on versioned configs
 - stack exec zzbot -- --print configs/config.xml
+- stack exec zzbot -- --print configs/examples/kcg.xml
