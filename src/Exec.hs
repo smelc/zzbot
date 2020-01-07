@@ -53,7 +53,9 @@ class Monad m => MonadExec m where
     :: String                       -- ^ The working directory
     -> Command                      -- ^ The command to execute
     -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
+  putOut   :: String -> m ()
   putOutLn :: String -> m ()
+  putErr   :: String -> m ()
   putErrLn :: String -> m ()
 
 instance MonadExec IO where
@@ -72,14 +74,17 @@ instance MonadExec IO where
    where
     createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
 
+  putOut   = putStr
   putOutLn = putStrLn
-
+  putErr   = hPutStr stderr
   putErrLn = hPutStrLn stderr
 
 instance MonadExec m => MonadExec (ExceptT e m) where
   zzLog textColor logEntry = lift (zzLog textColor logEntry)
   runShellCommand workdir command = lift (runShellCommand workdir command)
+  putOut   str = lift (putOut str)
   putOutLn str = lift (putOutLn str)
+  putErr   str = lift (putErr str)
   putErrLn str = lift (putErrLn str)
 
 inject
@@ -123,8 +128,8 @@ runStep ctxt (ShellCmd workdir cmd mprop) = do
                                            Just prop -> " → " ++ prop
   zzLog Info (show cmd ++ infoSuffix)
   (rc, outmsg, errmsg) <- runShellCommand workdir cmd
-  unless (null outmsg) $ putOutLn outmsg -- show step normal output, if any
-  unless (null errmsg) $ putErrLn errmsg -- show step error output, if any
+  unless (null outmsg) $ putOut outmsg -- show step normal output, if any
+  unless (null errmsg) $ putErr errmsg -- show step error output, if any
   case rc of
     ExitSuccess ->
       -- step succeeded, execution will continue

@@ -14,8 +14,10 @@ import Test.Hspec
 
 data LogEntry
   = Message LogLevel String
-  | StdOut String
-  | StdErr String
+  | StdOut   String
+  | StdOutLn String
+  | StdErr   String
+  | StdErrLn String
   deriving (Eq, Show)
 
 newtype LoggingMockExec a = LoggingMockExec (Writer [LogEntry] a)
@@ -32,9 +34,10 @@ instance MonadExec LoggingMockExec where
   runShellCommand _ (Command "ls" ["b"]) = return (ExitSuccess, "bar baz", "")
   runShellCommand _ _ = return (ExitFailure 127, "", "command not found")
 
-  putOutLn str = tell [StdOut str]
-
-  putErrLn str = tell [StdErr str]
+  putOut   str = tell [StdOut str]
+  putOutLn str = tell [StdOutLn str]
+  putErr   str = tell [StdErr str]
+  putErrLn str = tell [StdErrLn str]
 
 
 -- Tracing mock exec
@@ -53,7 +56,9 @@ instance MonadExec TracingMockExec where
   runShellCommand workdir command = do
     tell [Execution workdir command]
     return (ExitSuccess, "", "")
+  putOut   str = return ()
   putOutLn str = return ()
+  putErr   str = return ()
   putErrLn str = return ()
 
 -- Tests
