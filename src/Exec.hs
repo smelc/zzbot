@@ -50,7 +50,7 @@ data LogLevel = Info | Error
 class Monad m => MonadExec m where
   zzLog :: LogLevel -> String -> m ()
   runShellCommand
-    :: String                 -- ^ Optional path to the working directory
+    :: String                       -- ^ The working directory
     -> Command                      -- ^ The command to execute
     -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
   putOutLn :: String -> m ()
