@@ -2,6 +2,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Xml (
   aProperty
@@ -28,6 +30,7 @@ import Data.Maybe
 import Data.Validation
 import System.IO
 import Text.Printf
+import Text.Read
 import Text.XML.Light
 import Text.XML.Light.Types
 
@@ -74,6 +77,7 @@ data XmlParsingError
   | EmptyDocument
   | MissingAttribute String String (Maybe Line)
   | NoBuilder (Maybe Line)
+  | NotABoolean String String (Maybe Line) -- ^ The attribute that cannot be parsed as a Boolean, the attribute's value, the attribute's line.
   | NoRootElement
   | ShellAndProperty (Maybe Line)
   | SetPropertyFromCmdWithoutProperty (Maybe Line)
@@ -87,6 +91,7 @@ instance Show XmlParsingError where
   show EmptyDocument = "The document is empty"
   show (NoBuilder line) =
     giveLineInMsg "Configurations must have at least one builder" line
+  show (NotABoolean attr value line) = giveLineInMsg ("Value of attribute " ++ attr ++ " cannot be parsed as a Boolean: \"" ++ value ++ "\". Expected one of \"True\" \"False\".") line
   show NoRootElement = "Expected exactly one top-level element but found zero"
   show (MissingAttribute elem attr line) =
     giveLineInMsg
@@ -117,6 +122,25 @@ parseAttrValue zxml@ZElem {tag, attrs, maybeLine} attr parse =
     Just value -> parse value
     Nothing -> failWith (MissingAttribute tag attr maybeLine)
 
+parseBool :: String -- ^ An attribute
+          -> String -- ^ The attribute's value
+          -> Maybe Line -- ^ The line from which the attribute comes
+          -> XmlValidation Bool
+parseBool attr value maybeLine = 
+  let mvalue :: Maybe Bool = readMaybe value in
+  case mvalue of
+    Nothing -> failWith $ NotABoolean attr value maybeLine
+    Just b -> Success b
+
+parseOptionalBoolAttrValue :: ZXML   -- ^ The element in which the Boolean attribute is being searched
+                           -> String -- ^ The name of the attribute to look up
+                           -> XmlValidation (Maybe Bool) -- ^ An error message or the attribute's value
+parseOptionalBoolAttrValue zxml@ZElem {tag, attrs, maybeLine} attr =
+  -- @smelc -> @polux: There's conditional reasoning here, I cannot use applicative do, right?
+  case lookupAttrValue zxml attr of
+    Nothing -> Success Nothing
+    Just value -> Just <$> parseBool attr value maybeLine
+
 getAttrValue
   :: ZXML -- ^ The element in which the attribute is being searched
   -> String -- ^ The name of the attribute to look up
@@ -135,8 +159,8 @@ zxmlToSetPropertyFromValue zxml = do
 data ShellOrSetPropFromCmd = Shell | SetPropertyFromCommand
 
 validateShellOrSetPropFromCmd :: ShellOrSetPropFromCmd -- ^ Whether the XML is <shell> or <setPropertyFromCommand>
-                              -> Maybe String                  -- ^ The (optional) value of the "property" attribute
-                              -> Maybe Line                    -- ^ The (optional) line of the XML considered
+                              -> Maybe String -- ^ The (optional) value of the "property" attribute
+                              -> Maybe Line -- ^ The (optional) line of the XML considered
                               -> XmlValidation ()
 validateShellOrSetPropFromCmd Shell Nothing _ = Success ()
 validateShellOrSetPropFromCmd SetPropertyFromCommand (Just _) _ = Success ()
