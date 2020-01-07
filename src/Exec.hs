@@ -28,7 +28,7 @@ import System.IO
 import System.Process
 
 import Config
-import XmlParse
+import Xml
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set

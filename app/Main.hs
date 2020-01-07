@@ -12,7 +12,7 @@ import Exec
 import System.Directory
 import System.Environment
 import System.Exit
-import XmlParse
+import Xml
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text.Lazy as LT

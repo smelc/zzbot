@@ -1,12 +1,12 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module XmlParseSpec (spec) where
+module XmlSpec (spec) where
 
 import Config
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Validation
-import XmlParse
+import Xml
 import System.Exit
 import Test.Hspec
 import Test.QuickCheck hiding (Failure, Success)

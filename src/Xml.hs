@@ -3,7 +3,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 
-module XmlParse (
+module Xml (
   aProperty
   , aValue
   , failWith
