@@ -54,13 +54,13 @@ type family StepWorkDirType (p :: Phase) :: * where
 type family BuilderWorkDirType (p :: Phase) :: * where
   BuilderWorkDirType Parsed = Maybe String
   BuilderWorkDirType Normalized = ()
-  StepWorkDirType Substituted = ()
+  BuilderWorkDirType Substituted = ()
 
 
 type family ConfigSubstType (p :: Phase) :: * where
-  BuilderWorkDirType Parsed = Subst
-  BuilderWorkDirType Normalized = Subst
-  StepWorkDirType Substituted = ()
+  ConfigSubstType Parsed = Subst
+  ConfigSubstType Normalized = Subst
+  ConfigSubstType Substituted = ()
 
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
   deriving (Eq)
