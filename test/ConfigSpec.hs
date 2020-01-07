@@ -76,12 +76,12 @@ testSubstitute = do
       duplicates [0, 1] `shouldBe` []
   describe "subsitute" $ do
     it "should succeed when all variables are known" $
-      substitute ("(", ")") goodSubst builder `shouldBe` V.Success expectedSuccess
+      substitute @(Builder Normalized) @(Builder Substituted) ("(", ")") goodSubst builder `shouldBe` V.Success expectedSuccess
     it "should fail when some variables are unknown" $
-      substitute ("(", ")") badSubst builder `shouldBe` V.Failure expectedErrors
+      substitute @(Builder Normalized) @(Builder Substituted) ("(", ")") badSubst builder `shouldBe` V.Failure expectedErrors
  where
   builder =
-    Builder @Normalized () "builder"
+    Builder () "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
       , ShellCmd "(b)" (Command "ls" ["(a)", "(b)"]) Nothing
       ]

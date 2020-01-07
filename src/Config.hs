@@ -7,6 +7,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Config (
   applySubstitution
@@ -43,15 +44,23 @@ import qualified Data.Text.Lazy as LT
 
 -- AST
 
-data Phase = Parsed | Normalized
+data Phase = Parsed | Normalized | Substituted
 
 type family StepWorkDirType (p :: Phase) :: * where
   StepWorkDirType Parsed = Maybe String
   StepWorkDirType Normalized = String
+  StepWorkDirType Substituted = String
 
 type family BuilderWorkDirType (p :: Phase) :: * where
   BuilderWorkDirType Parsed = Maybe String
   BuilderWorkDirType Normalized = ()
+  StepWorkDirType Substituted = ()
+
+
+type family ConfigSubstType (p :: Phase) :: * where
+  BuilderWorkDirType Parsed = Subst
+  BuilderWorkDirType Normalized = Subst
+  StepWorkDirType Substituted = ()
 
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
   deriving (Eq)
@@ -65,22 +74,28 @@ data Step (p :: Phase)
 
 deriving instance Eq (Step Parsed)
 deriving instance Eq (Step Normalized)
+deriving instance Eq (Step Substituted)
 deriving instance Show (Step Parsed)
 deriving instance Show (Step Normalized)
+deriving instance Show (Step Substituted)
 
 data Builder (p :: Phase) = Builder { workdir :: BuilderWorkDirType p, name :: String, steps :: [Step p] }
 
 deriving instance Eq (Builder Parsed)
 deriving instance Eq (Builder Normalized)
+deriving instance Eq (Builder Substituted)
 deriving instance Show (Builder Parsed)
 deriving instance Show (Builder Normalized)
+deriving instance Show (Builder Substituted)
 
-data Config (p :: Phase) = Config { builders :: NE.NonEmpty (Builder p), subst :: Subst }
+data Config (p :: Phase) = Config { builders :: NE.NonEmpty (Builder p), subst :: ConfigSubstType p }
 
 deriving instance Eq (Config Parsed)
 deriving instance Eq (Config Normalized)
+deriving instance Eq (Config Substituted)
 deriving instance Show (Config Parsed)
 deriving instance Show (Config Normalized)
+deriving instance Show (Config Substituted)
 
 instance Show Command where
   show (Command cmd []) = cmd
@@ -111,9 +126,9 @@ instance Show ValidationError where
    where
     domain = unwords (map fst subst)
 
-class Substable a where
+class Substable a b where
     -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
-    substitute :: (String, String) -> Subst -> a -> ConfigValidation a
+    substitute :: (String, String) -> Subst -> a -> ConfigValidation b
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -206,7 +221,7 @@ attr =? Just value = attr =: value
 
 -- TODO Those strings should not be hardcoded here. They should be moved out from XmlParse
 -- into a new file, on which this file could depend; without introducing an imports cycle
-instance ToXml (Step Normalized) where
+instance ToXml (Step Substituted) where
     toXml (SetPropertyFromValue prop value) =
       Element "setProperty" ("property" =: prop <> "value" =: value) []
     toXml (ShellCmd workdir cmd mprop) =
@@ -216,7 +231,7 @@ instance ToXml (Step Normalized) where
       where tag = case mprop of Nothing -> "shell"
                                 Just _  -> "setPropertyFromCommand"
 
-instance ToXml (Builder Normalized) where
+instance ToXml (Builder Substituted) where
     toXml (Builder workdir name steps) =
       Element "builder" Map.empty (map (NodeElement . toXml) steps)
 
@@ -227,10 +242,9 @@ instance ToXml Subst where
             entryToXml (name, value) =
               Element "entry" ("name" =: name <> "value" =: value) []
 
-instance ToXml (Config Normalized) where
-  toXml (Config builders subst) =
-      Element "config" Map.empty (substNode : NE.toList (NE.map (NodeElement . toXml) builders))
-      where substNode :: Node = (NodeElement . toXml) subst
+instance ToXml (Config Substituted) where
+  toXml (Config builders ()) =
+      Element "config" Map.empty (NE.toList (NE.map (NodeElement . toXml) builders))
 
 renderAsXml :: ToXml a => a -> LT.Text
 renderAsXml x = renderText settings doc
@@ -248,16 +262,16 @@ renderAsXml x = renderText settings doc
 --    substitute delimiters subst text = applySubstitution delimiters subst text
 
 -- Lift substitute to traversables
-instance (Traversable t, Substable a) => Substable (t a) where
+instance (Traversable t, Substable a b) => Substable (t a) (t b) where
     substitute delimiters subst = traverse (substitute delimiters subst)
 
-instance Substable Command where
+instance Substable Command Command where
   substitute delimiters subst (Command cmd args) =
     Command
       <$> applySubstitution delimiters subst cmd
       <*> traverse (applySubstitution delimiters subst) args
 
-instance Substable (Step Normalized) where
+instance (StepWorkDirType a ~ String) => Substable (Step a) (Step Substituted) where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
   substitute delimiters subst (ShellCmd workdir cmd mprop) =
@@ -266,8 +280,8 @@ instance Substable (Step Normalized) where
       <*> substitute delimiters subst cmd
       <*> Success mprop
 
-instance Substable (Builder Normalized) where
-  substitute delimiters subst (Builder workdir name steps) =
+instance (StepWorkDirType a ~ String) => Substable (Builder a) (Builder Substituted) where
+  substitute delimiters subst (Builder _ name steps) =
     Builder ()
       <$> applySubstitution delimiters subst name
       <*> substitute delimiters subst steps
@@ -279,24 +293,24 @@ checkNoDuplicates subst =
     dupes -> failWith $ DuplicateSubstEntries dupes
 
 -- |Substitute $[...] variables
-substSquare :: Config Normalized -> ConfigValidation (Config Normalized)
+substSquare :: Config Normalized -> ConfigValidation (Config Substituted)
 substSquare Config{builders, subst} = do
   checkNoDuplicates subst
   substedBuilders <- traverse (substitute ("$[", "]") subst) builders
-  return $ Config substedBuilders []
+  return $ Config substedBuilders ()
 
 -- |Substitute environment variables (${})
 substEnv :: [(String, String)] -- ^ The environment
-         -> Config Normalized           -- ^ The configuration to substitute
-         -> ConfigValidation (Config Normalized)
+         -> Config Substituted -- ^ The configuration to substitute
+         -> ConfigValidation (Config Substituted)
 substEnv env Config{builders, subst} = do
   substedBuilders <- traverse (substitute ("${", "}") env) builders
-  return $ Config substedBuilders subst
+  return $ Config substedBuilders ()
 
 -- |Substitute $[..] variables and environment variables (${})
 substAll :: [(String, String)]
          -> Config Normalized
-         -> ConfigValidation (Config Normalized)
+         -> ConfigValidation (Config Substituted)
 substAll env config =
   substSquare config `bindValidation` substEnv env
 
