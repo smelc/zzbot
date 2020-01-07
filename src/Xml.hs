@@ -263,7 +263,6 @@ parseXmlFile filepath = do
 -- Pretty-printing of Builders as XML --
 ----------------------------------------
 
-
 (=:) :: String -> String -> [Attr]
 attr =: value = [Attr (unqual attr) value]
 
