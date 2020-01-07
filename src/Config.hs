@@ -2,7 +2,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -19,7 +18,6 @@ module Config (
   , normalize
   , parseVars
   , Phase(..)
-  , renderAsXml
   , splitAround
   , splitDelimiters
   , Step(..)
@@ -30,18 +28,16 @@ module Config (
 ) where
 
 import Data.Either
+import Data.Foldable
 import Data.List
 import Data.Maybe
 import Data.Validation
 import System.FilePath
 import Text.Printf
-import Text.XML
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as LT
 
 -- AST
 
@@ -202,56 +198,6 @@ duplicates elems = Map.keys (Map.filter (>1) counts)
  where
   counts = Map.unionsWith (+) (map singleton elems)
   singleton elem = Map.singleton elem 1
-
----------
--- XML --
----------
-
-class ToXml a where
-    toXml :: a -> Element
-
-simpleName :: String -> Name
-simpleName name = Name (T.pack name) Nothing Nothing
-
-(=:) :: String -> String -> Map.Map Name T.Text
-attr =: value = Map.singleton (simpleName attr) (T.pack value)
-
-(=?) :: String -> Maybe String -> Map.Map Name T.Text
-attr =? Nothing = Map.empty
-attr =? Just value = attr =: value
-
--- TODO Those strings should not be hardcoded here. They should be moved out from XmlParse
--- into a new file, on which this file could depend; without introducing an imports cycle
-instance ToXml (Step Substituted) where
-    toXml (SetPropertyFromValue prop value) =
-      Element "setProperty" ("property" =: prop <> "value" =: value) []
-    toXml (ShellCmd workdir cmd mprop) =
-      Element tag ("command" =: show cmd
-                  <> "workdir" =: workdir
-                  <> "property" =? mprop) []
-      where tag = case mprop of Nothing -> "shell"
-                                Just _  -> "setPropertyFromCommand"
-
-instance ToXml (Builder Substituted) where
-    toXml (Builder workdir name steps) =
-      Element "builder" Map.empty (map (NodeElement . toXml) steps)
-
-instance ToXml Subst where
-    toXml subst =
-      Element "substitution" Map.empty  (map (NodeElement . entryToXml) subst)
-      where entryToXml :: (String, String) -> Element
-            entryToXml (name, value) =
-              Element "entry" ("name" =: name <> "value" =: value) []
-
-instance ToXml (Config Substituted) where
-  toXml (Config builders ()) =
-      Element "config" Map.empty (NE.toList (NE.map (NodeElement . toXml) builders))
-
-renderAsXml :: ToXml a => a -> LT.Text
-renderAsXml x = renderText settings doc
- where
-  settings = def {rsPretty=True, rsXMLDeclaration=False}
-  doc = Document (Prologue [] Nothing []) (toXml x) []
 
 ---------------------------------
 -- Implementation of Substable --

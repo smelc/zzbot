@@ -28,11 +28,10 @@ import System.IO
 import System.Process
 
 import Config
-import XmlParse
+import Xml
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Text.Lazy as LT
 import qualified GHC.IO.Handle as Handle
 
 parsingErrorCode, substitutionErrorCode, subprocessErrorCode :: ExitCode
@@ -159,5 +158,5 @@ process printOnly env xml = do
   let config' = normalize (Exec.workdir env) config
   sconfig@Config{builders} <- inject substitutionErrorCode (substAll (sysenv env) config')
   if printOnly
-    then putOutLn (LT.unpack $ renderAsXml sconfig)
+    then putOutLn (renderAsXml sconfig)
     else traverse_ runBuild builders

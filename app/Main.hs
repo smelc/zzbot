@@ -12,11 +12,9 @@ import Exec
 import System.Directory
 import System.Environment
 import System.Exit
-import XmlParse
+import Xml
 
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.IO as LT
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Options.Applicative as Opt

@@ -2,9 +2,9 @@ import Test.Hspec
 
 import ConfigSpec
 import ExecSpec
-import XmlParseSpec
+import XmlSpec
 
 main = hspec $ do
     describe "Config" ConfigSpec.spec
     describe "Exec" ExecSpec.spec
-    describe "XmlParse" XmlParseSpec.spec
+    describe "Xml" XmlSpec.spec

@@ -3,12 +3,13 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 
-module XmlParse (
+module Xml (
   aProperty
   , aValue
   , failWith
   , parseXmlFile
   , parseXmlString
+  , renderAsXml
   , tBuilder
   , tSetProperty
   , tSetPropertyFromCommand
@@ -27,12 +28,14 @@ import Data.Maybe
 import Data.Validation
 import System.IO
 import Text.Printf
+import Text.XML.Light
 import Text.XML.Light.Types
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Text.XML.Light.Input as XmlInput
+import qualified Text.XML.Light.Output as XmlOutput
 
 import Config
 
@@ -41,8 +44,11 @@ import Config
 ---------------------------------------------------
 
 -- Attributes
+aCommand = "command"
+aName = "name"
 aProperty = "property"
 aValue = "value"
+aWorkdir = "workdir"
 
 -- Tags
 tBuilder, tSetProperty, tShell, tConfig :: String
@@ -139,10 +145,10 @@ validateShellOrSetPropFromCmd SetPropertyFromCommand Nothing maybeLine = failWit
 
 zxmlToShellCmd :: ZXML -> ShellOrSetPropFromCmd -> XmlValidation (Step Parsed)
 zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
-  let workdir = lookupAttrValue zxml "workdir"
-      mprop = lookupAttrValue zxml "property"
+  let workdir = lookupAttrValue zxml aWorkdir
+      mprop = lookupAttrValue zxml aProperty
   validateShellOrSetPropFromCmd shellOrSetPropertyFromCmd mprop maybeLine
-  cmd <- parseAttrValue zxml "command" (parseCommand . words)
+  cmd <- parseAttrValue zxml aCommand (parseCommand . words)
   return (ShellCmd workdir cmd mprop)
  where
   parseCommand [] = failWith (EmptyCommand maybeLine)
@@ -157,8 +163,8 @@ parseStep zxml@ZElem {tag, maybeLine}
 
 zXMLToBuilder :: ZXML -> XmlValidation (Builder Parsed)
 zXMLToBuilder zxml@ZElem {children} = do
-  let workdir = lookupAttrValue zxml "workdir"
-  name <- getAttrValue zxml "name"
+  let workdir = lookupAttrValue zxml aWorkdir
+  name <- getAttrValue zxml aName
   steps <- traverse parseStep children
   return $ Builder workdir name steps
 
@@ -175,8 +181,8 @@ parseEntry zxml@ZElem {tag, maybeLine}
 
 zXMLToEntry :: ZXML -> XmlValidation (String, String)
 zXMLToEntry zxml = do
-  name <- getAttrValue zxml "name"
-  value <- getAttrValue zxml "value"
+  name <- getAttrValue zxml aName
+  value <- getAttrValue zxml aValue
   return (name, value)
 
 zXMLToSubst :: ZXML -> XmlValidation Subst
@@ -252,3 +258,58 @@ parseXmlFile filepath = do
     handle :: Handle <- openFile filepath ReadMode
     contents :: String <- hGetContents handle
     return $ parseXmlString contents
+
+----------------------------------------
+-- Pretty-printing of Builders as XML --
+----------------------------------------
+
+(=:) :: String -> String -> [Attr]
+attr =: value = [Attr (unqual attr) value]
+
+(=?) :: String -> Maybe String -> [Attr]
+attr =? Nothing = []
+attr =? Just value = attr =: value
+
+element :: String -> [Attr] -> [Content] -> Element
+element tag attrs children =
+  Element
+    (unqual tag)
+    attrs
+    children
+    Nothing
+
+stepToXml :: Step Substituted -> Element
+stepToXml (SetPropertyFromValue prop value) =
+  element
+    tSetProperty
+    (aProperty =: prop <> aValue =: value)
+    []
+stepToXml (ShellCmd workdir cmd mprop) =
+  element
+    tag
+    (aCommand =: show cmd
+      <> aWorkdir =: workdir
+      <> aProperty =? mprop)
+    []
+ where
+  tag | isJust mprop = tSetPropertyFromCommand
+      | otherwise = tShell
+
+substToXml :: Subst -> Element
+substToXml subst =
+  element tSubstitution [] (map (Elem . entryToXml) subst)
+
+entryToXml :: (String, String) -> Element
+entryToXml (name, value) =
+  element tEntry (aName =: name <> aValue =: value) []
+
+builderToXml :: Builder Substituted -> Element
+builderToXml (Builder () name steps) =
+  element tBuilder [] (map (Elem . stepToXml) steps)
+
+configToXml :: Config Substituted -> Element
+configToXml (Config builders ()) =
+  element tConfig [] (toList (fmap (Elem . builderToXml) builders))
+
+renderAsXml :: Config Substituted -> String
+renderAsXml x = XmlOutput.ppElement (configToXml x)
