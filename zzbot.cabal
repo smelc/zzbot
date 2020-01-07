@@ -25,7 +25,6 @@ library
                      prettyprinter,
                      prettyprinter-ansi-terminal,
                      process,
-                     text,
                      validation,
                      xml
 
@@ -39,7 +38,6 @@ executable zzbot
                      directory,
                      mtl,
                      optparse-applicative,
-                     text,
                      validation,
                      zzbot
 
