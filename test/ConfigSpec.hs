@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module ConfigSpec (spec) where
 
@@ -97,9 +98,74 @@ testSubstitute = do
     , KeyNotFound badSubst "b"
     ]
 
+testNormalize :: SpecWith ()
+testNormalize =
+  describe "normalize" $ do
+    it "no workdir in builder, no workdir in step" $
+      normalizesTo "/home/user" Nothing Nothing "/home/user"
+    it "no workdir in builder, relative workdir in step" $
+      normalizesTo "/home/user" Nothing (Just "rel/dir") "/home/user/rel/dir"
+    it "no workdir in builder, absolute workdir in step" $
+      normalizesTo "/home/user" Nothing (Just "/abs/dir") "/abs/dir"
+    it "relative workdir in builder, no workdir in step" $
+      normalizesTo "/home/user" (Just "rel/dir") Nothing "/home/user/rel/dir"
+    it "relative workdir in builder, relative workdir in step" $
+      normalizesTo "/home/user" (Just "rel/dir1") (Just "rel/dir2") "/home/user/rel/dir1/rel/dir2"
+    it "relative workdir in builder, absolute workdir in step" $
+      normalizesTo "/home/user" (Just "rel/dir") (Just "/abs/dir") "/abs/dir"
+    it "absolute workdir in builder, no workdir in step" $
+      normalizesTo "/home/user" (Just "/abs/dir") Nothing "/abs/dir"
+    it "absolute workdir in builder, relative workdir in step" $
+      normalizesTo "/home/user" (Just "/abs/dir") (Just "rel/dir") "/abs/dir/rel/dir"
+    it "absolute workdir in builder, absolute workdir in step" $
+      normalizesTo "/home/user" (Just "/abs/dir1") (Just "/abs/dir2") "/abs/dir2"
+ where
+  normalizesTo :: FilePath -> Maybe FilePath -> Maybe FilePath -> FilePath -> Expectation
+  normalizesTo userWorkdir builderWorkdir stepWorkdir exepectedStepWorkdir =
+    normalize userWorkdir originalConfig `shouldBe` expectedNormalizedConfig
+   where
+    originalConfig :: Config Parsed
+    originalConfig = Config
+      { builders =
+          Builder
+            { name = "test"
+            , workdir = builderWorkdir
+            , steps =
+                [ ShellCmd
+                    { workdir = stepWorkdir
+                    , cmd = Command "" []
+                    , mprop = Nothing
+                    , haltOnFailure = Nothing
+                    }
+                ]
+            }
+            NE.:| []
+      , subst = []
+      }
+    expectedNormalizedConfig :: Config Normalized
+    expectedNormalizedConfig = Config
+      { builders =
+          Builder
+            { name = "test"
+            , workdir = ()
+            , steps =
+                [ ShellCmd
+                    { workdir = exepectedStepWorkdir
+                    , cmd = Command "" []
+                    , mprop = Nothing
+                    , haltOnFailure = True
+                    }
+                ]
+            }
+            NE.:| []
+      , subst = []
+      }
+
+
 
 spec = do
   testParseVars
   testSplitAround
   testSplitDelimiters
   testSubstitute
+  testNormalize
