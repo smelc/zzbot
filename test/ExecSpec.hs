@@ -22,9 +22,7 @@ mockShellCommand _ = (ExitFailure 127, "", "command not found")
 data LogEntry
   = Message LogLevel String
   | StdOut   String
-  | StdOutLn String
   | StdErr   String
-  | StdErrLn String
   deriving (Eq, Show)
 
 newtype LoggingMockExec a = LoggingMockExec (Writer [LogEntry] a)
@@ -40,9 +38,7 @@ instance MonadExec LoggingMockExec where
   runShellCommand _ cmd = return (mockShellCommand cmd)
 
   putOut   str = tell [StdOut str]
-  putOutLn str = tell [StdOutLn str]
   putErr   str = tell [StdErr str]
-  putErrLn str = tell [StdErrLn str]
 
 -- Tracing mock exec
 
@@ -61,9 +57,7 @@ instance MonadExec TracingMockExec where
     tell [Execution workdir command]
     return (mockShellCommand command)
   putOut   str = return ()
-  putOutLn str = return ()
   putErr   str = return ()
-  putErrLn str = return ()
 
 -- Tests
 
