@@ -274,14 +274,21 @@ normalize :: FilePath -- ^ The working directory
 normalize userWorkDir Config{builders, subst} =
   Config (fmap normalizeBuilder builders) subst
  where
+  prependIfRelative :: FilePath -> FilePath -> FilePath
+  prependIfRelative prefix filepath =
+    if isAbsolute filepath
+      then filepath
+      else prefix </> filepath
+
   normalizeBuilder :: Builder Parsed -> Builder Normalized
   normalizeBuilder builder@Builder{workdir=builderWorkDir, name, steps} =
     builder
       { workdir = ()
-      , steps = map (normalizeStep defaultWorkDir) steps
+      , steps = map (normalizeStep absoluteWorkDir) steps
       }
    where
-    defaultWorkDir = fromMaybe userWorkDir builderWorkDir
+    relativeWorkDir = fromMaybe "" builderWorkDir
+    absoluteWorkDir = prependIfRelative userWorkDir relativeWorkDir
 
   normalizeStep :: FilePath -> Step Parsed -> Step Normalized
   normalizeStep _ SetPropertyFromValue{..} = SetPropertyFromValue {..}
@@ -292,11 +299,8 @@ normalize userWorkDir Config{builders, subst} =
       }
    where
     -- take default workdir if Step doesn't specify one
-    relativeWorkDir = fromMaybe defaultWorkDir stepWorkDir
+    relativeWorkDir = fromMaybe "" stepWorkDir
     -- make it absolute
-    absoluteWorkDir =
-      if isAbsolute relativeWorkDir
-        then relativeWorkDir
-        else userWorkDir </> relativeWorkDir
+    absoluteWorkDir = prependIfRelative defaultWorkDir relativeWorkDir
     -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
     defaultHaltOnFailure = isNothing mprop

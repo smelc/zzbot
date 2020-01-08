@@ -68,12 +68,13 @@ spec =
     it "should set the working directory as specified" $
       runTracingMockExec (runExceptT (process Execute env testXml)) `shouldBe` expectedTrace
   where
-    env = ProcessEnv "testworkdir" [("ENV_VAR", "a")]
+    env = ProcessEnv "/test/workdir" [("ENV_VAR", "a")]
     testXml =
       "<config>\
       \  <builder name=\"test\" workdir=\"dir1\">\
       \    <shell command=\"ls ${ENV_VAR}\"/>\
       \    <shell workdir=\"dir2\" command=\"ls b\"/>\
+      \    <shell workdir=\"/absolute/dir\" command=\"ls b\"/>\
       \    <shell command=\"some junk 1\" haltOnFailure=\"False\"/>\
       \    <shell command=\"some junk 2\"/>\
       \    <shell command=\"some junk 3\"/>\
@@ -83,6 +84,8 @@ spec =
       ( Left (ExitFailure 3)
       , [ Message Info "ls a"
         , StdOut "foo bar"
+        , Message Info "ls b"
+        , StdOut "bar baz"
         , Message Info "ls b"
         , StdOut "bar baz"
         , Message Info "some junk 1"
@@ -95,9 +98,10 @@ spec =
       )
     expectedTrace =
       ( Left (ExitFailure 3)
-      , [ Execution "testworkdir/dir1" (Command "ls" ["a"])
-        , Execution "testworkdir/dir2" (Command "ls" ["b"])
-        , Execution "testworkdir/dir1" (Command "some" ["junk", "1"])
-        , Execution "testworkdir/dir1" (Command "some" ["junk", "2"])
+      , [ Execution "/test/workdir/dir1" (Command "ls" ["a"])
+        , Execution "/test/workdir/dir1/dir2" (Command "ls" ["b"])
+        , Execution "/absolute/dir" (Command "ls" ["b"])
+        , Execution "/test/workdir/dir1" (Command "some" ["junk", "1"])
+        , Execution "/test/workdir/dir1" (Command "some" ["junk", "2"])
         ]
       )
