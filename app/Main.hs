@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
 module Main where
 
 import Config
@@ -20,22 +21,31 @@ import qualified Data.Set as Set
 import qualified Options.Applicative as Opt
 
 {- HLINT ignore Options -}
-data Options = Options { optFilenames :: NonEmpty String, optPrint :: Bool }
+data Options = Options
+  { optFilenames :: NonEmpty String
+  , optProcessMode :: ProcessMode
+  }
 
 optionsParser :: Opt.Parser Options
-optionsParser = Options <$> NE.some1 (Opt.strArgument (Opt.metavar "FILE"))
-                        <*> Opt.switch (Opt.long "print" <> Opt.short 'p' <> Opt.help "print the builder's interpretation, but do not execute it")
+optionsParser =
+  Options
+    <$> NE.some1 (Opt.strArgument (Opt.metavar "FILE"))
+    <*> Opt.flag
+          Execute
+          PrintOnly
+          (Opt.long "print"
+             <> Opt.short 'p'
+             <> Opt.help "print the builder's interpretation, but do not execute it")
 
 optionsParserInfo :: Opt.ParserInfo Options
 optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
 main :: IO ()
 main = do
-  Options{optFilenames, optPrint} <- Opt.execParser optionsParserInfo
-  workdir <- getCurrentDirectory
-  sysenv <- getEnvironment
+  Options{optFilenames, optProcessMode} <- Opt.execParser optionsParserInfo
+  env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
-  res <- runExceptT $ traverse (process optPrint (ProcessEnv workdir sysenv)) xmls
+  res <- runExceptT $ traverse (process optProcessMode env) xmls
   case res of
     Left code -> exitWith code
     _ -> return ()

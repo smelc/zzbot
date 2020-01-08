@@ -64,9 +64,9 @@ instance MonadExec TracingMockExec where
 spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
-      runLoggingMockExec (runExceptT (process False env testXml)) `shouldBe` expectedOutput
+      runLoggingMockExec (runExceptT (process Execute env testXml)) `shouldBe` expectedOutput
     it "should set the working directory as specified" $
-      runTracingMockExec (runExceptT (process False env testXml)) `shouldBe` expectedTrace
+      runTracingMockExec (runExceptT (process Execute env testXml)) `shouldBe` expectedTrace
   where
     env = ProcessEnv "testworkdir" []
     testXml =

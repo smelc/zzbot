@@ -9,6 +9,7 @@ module Exec
   ( ProcessEnv(..)
   , MonadExec(..)
   , LogLevel(..)
+  , ProcessMode(..)
   , runBuild
   , process
    ) where
@@ -143,16 +144,18 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
                              }
 
+data ProcessMode = PrintOnly | Execute
+
 process
   :: (MonadExec m, MonadError ExitCode m)
-  => Bool -- ^ Whether to print (True) or execute the builder (False)
+  => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> m ()
-process printOnly env xml = do
+process mode env xml = do
   config <- inject parsingErrorCode (parseXmlString xml)
   let config' = normalize (Exec.workdir env) config
   sconfig@Config{builders} <- inject substitutionErrorCode (substAll (sysenv env) config')
-  if printOnly
-    then putOutLn (renderAsXml sconfig)
-    else traverse_ runBuild builders
+  case mode of
+    PrintOnly -> putOutLn (renderAsXml sconfig)
+    Execute ->traverse_ runBuild builders
