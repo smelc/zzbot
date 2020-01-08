@@ -130,8 +130,7 @@ instance Show ValidationError where
     domain = unwords (map fst subst)
 
 class Substable a b where
-    -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
-    substitute :: (String, String) -> Subst -> a -> ConfigValidation b
+  substitute :: (String, String) -> Subst -> a -> ConfigValidation b
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -208,11 +207,6 @@ duplicates elems = Map.keys (Map.filter (>1) counts)
 ---------------------------------
 -- Implementation of Substable --
 ---------------------------------
-
--- Creates an instance overlapping with the one for lists, because hey
--- String is [Char]!
--- instance Substable String where
---    substitute delimiters subst text = applySubstitution delimiters subst text
 
 -- Lift substitute to traversables
 instance (Traversable t, Substable a b) => Substable (t a) (t b) where
@@ -298,9 +292,7 @@ normalize userWorkDir Config{builders, subst} =
       , haltOnFailure = fromMaybe defaultHaltOnFailure haltOnFailure
       }
    where
-    -- take default workdir if Step doesn't specify one
     relativeWorkDir = fromMaybe "" stepWorkDir
-    -- make it absolute
     absoluteWorkDir = prependIfRelative defaultWorkDir relativeWorkDir
     -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
     defaultHaltOnFailure = isNothing mprop
