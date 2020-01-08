@@ -49,4 +49,4 @@ script:
 - stack exec zzbot -- configs/tests/haltOnFailure2.xml
 - stack exec zzbot -- configs/tests/haltOnFailure3.xml
 # Test invalid execution
-- if [[ `stack exec zzbot -- configs/tests/haltOnFailure1.xml` ]]; then >&2 echo "Call to zzbot should fail, but it succeeded"; exit 1; fi
+- if stack exec zzbot -- configs/tests/haltOnFailure1.xml; then >&2 echo "Call to zzbot should fail, but it succeeded"; exit 1; fi
