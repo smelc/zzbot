@@ -83,13 +83,13 @@ testSubstitute = do
   builder =
     Builder () "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-      , ShellCmd "(b)" (Command "ls" ["(a)", "(b)"]) Nothing
+      , ShellCmd "(b)" (Command "ls" ["(a)", "(b)"]) Nothing True
       ]
   goodSubst = [("a", "xx"), ("b", "yy")]
   expectedSuccess =
     Builder () "builder"
       [ SetPropertyFromValue "prop" "fooxxbaryybaz"
-      , ShellCmd "yy" (Command "ls" ["xx", "yy"]) Nothing
+      , ShellCmd "yy" (Command "ls" ["xx", "yy"]) Nothing True
       ]
   badSubst = [("c", "xx")]
   expectedErrors = Set.fromList

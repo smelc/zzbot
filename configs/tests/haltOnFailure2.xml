@@ -1,0 +1,6 @@
+<!-- We test that this builder exits with 0, despite the command failing because haltOnFailure="False" is specified -->
+<config>
+  <builder name="test builder">
+    <shell command="ls /doesnt_exist" haltOnFailure="False"/>
+  </builder>
+</config>

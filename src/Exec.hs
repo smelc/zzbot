@@ -122,23 +122,18 @@ runStep :: (MonadExec m, MonadError ExitCode m)
         -> m BuildContext
 runStep ctxt (SetPropertyFromValue prop value) =
   return $ Map.insert prop value ctxt
-runStep ctxt (ShellCmd workdir cmd mprop) = do
+runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   let infoSuffix :: String = case mprop of Nothing -> ""
                                            Just prop -> " → " ++ prop
   zzLog Info (show cmd ++ infoSuffix)
   (rc, outmsg, errmsg) <- runShellCommand workdir cmd
   unless (null outmsg) $ putOut outmsg -- show step normal output, if any
   unless (null errmsg) $ putErr errmsg -- show step error output, if any
-  case rc of
-    ExitSuccess ->
-      -- step succeeded, execution will continue
-      let ctxt' = case mprop of Nothing -> ctxt
-                                Just prop -> Map.insert prop outmsg ctxt in
-      return ctxt'
-    _ -> do
-      -- step failed, execution will stop
-      zzLog Error (show cmd ++ " failed: " ++ show rc)
-      throwError subprocessErrorCode
+  let ctxt' = case mprop of Nothing -> ctxt
+                            Just prop -> Map.insert prop outmsg ctxt
+  unless (rc == ExitSuccess) $ zzLog Error (show cmd ++ " failed: " ++ show rc)
+  when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
+  return ctxt'
 
 runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
 runBuild (Builder () _ steps) = runSteps Map.empty steps

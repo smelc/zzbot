@@ -10,6 +10,7 @@ import Xml
 import System.Exit
 import Test.Hspec
 import Test.QuickCheck hiding (Failure, Success)
+import Text.Printf
 
 import qualified Data.Set as Set
 import qualified Test.Hspec.QuickCheck as QuickCheck
@@ -105,6 +106,22 @@ badXml15 =
   \</config>"
 expectedResultForBadXml15 = Failure $ Set.fromList [ ShellAndProperty (Just 3) ]
 
+badXml16 =
+  "<config>\n\
+  \  <builder name=\"foo\">\n\
+  \    <shell command=\"ls\" haltOnFailure=\"bad\"/>\n\
+  \  </builder>\n\
+  \</config>"
+expectedResultForBadXml16 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure "bad" (Just 3) ]
+
+badXml17 =
+  "<config>\n\
+  \  <builder name=\"foo\">\n\
+  \    <setPropertyFromCommand command=\"ls\" property=\"whatever\" haltOnFailure=\"foo\"/>\n\
+  \  </builder>\n\
+  \</config>"
+expectedResultForBadXml17 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure "foo" (Just 3) ]
+
 validXml =
   "<config>\
   \  <substitution>\
@@ -113,7 +130,7 @@ validXml =
   \    <entry name=\"bb\" value=\"22\"/>\
   \  </substitution>\
   \  <builder workdir=\"dir1\" name=\"ls builder\">\
-  \    <shell workdir=\"dir2\" command=\"ls /\"/>\
+  \    <shell workdir=\"dir2\" command=\"ls /\" haltOnFailure=\"True\"/>\
   \    <setProperty property=\"prop\" value=\"foobar\"/>\
   \  </builder>\
   \</config>"
@@ -124,7 +141,7 @@ expectedResultForValidXml = Success config
       { workdir = Just "dir1"
       , name = "ls builder"
       , steps =
-        [ ShellCmd { workdir = Just "dir2", cmd = Command "ls" ["/"], mprop = Nothing }
+        [ ShellCmd { workdir = Just "dir2", cmd = Command "ls" ["/"], mprop = Nothing, haltOnFailure=Just True }
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }
@@ -166,4 +183,8 @@ spec =
       parseXmlString badXml14 `shouldBe` expectedResultForBadXml14
     it "should fail on invalid '<shell> + property attribute' combination" $
       parseXmlString badXml15 `shouldBe` expectedResultForBadXml15
+    it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tShell) $
+      parseXmlString badXml16 `shouldBe` expectedResultForBadXml16
+    it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetPropertyFromCommand ) $
+      parseXmlString badXml17 `shouldBe` expectedResultForBadXml17
 

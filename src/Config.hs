@@ -43,21 +43,25 @@ import qualified Data.Set as Set
 
 data Phase = Parsed | Normalized | Substituted
 
-type family StepWorkDirType (p :: Phase) :: * where
-  StepWorkDirType Parsed = Maybe String
-  StepWorkDirType Normalized = String
-  StepWorkDirType Substituted = String
-
 type family BuilderWorkDirType (p :: Phase) :: * where
   BuilderWorkDirType Parsed = Maybe String
   BuilderWorkDirType Normalized = ()
   BuilderWorkDirType Substituted = ()
 
-
 type family ConfigSubstType (p :: Phase) :: * where
   ConfigSubstType Parsed = Subst
   ConfigSubstType Normalized = Subst
   ConfigSubstType Substituted = ()
+
+type family StepHaltOnFailureType (p :: Phase) :: * where
+  StepHaltOnFailureType Parsed = Maybe Bool
+  StepHaltOnFailureType Normalized = Bool
+  StepHaltOnFailureType Substituted = Bool
+
+type family StepWorkDirType (p :: Phase) :: * where
+  StepWorkDirType Parsed = Maybe String
+  StepWorkDirType Normalized = String
+  StepWorkDirType Substituted = String
 
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
   deriving (Eq)
@@ -66,7 +70,8 @@ data Step (p :: Phase)
     = SetPropertyFromValue { prop :: String, value :: String }
     | ShellCmd             { workdir :: StepWorkDirType p,
                              cmd :: Command,
-                             mprop :: Maybe String -- ^ The build property to set (if any) from the command's output
+                             mprop :: Maybe String, -- ^ The build property to set (if any) from the command's output
+                             haltOnFailure :: StepHaltOnFailureType p
                            }
 
 deriving instance Eq (Step Parsed)
@@ -218,16 +223,17 @@ instance Substable Command Command where
       <$> applySubstitution delimiters subst cmd
       <*> traverse (applySubstitution delimiters subst) args
 
-instance (StepWorkDirType a ~ String) => Substable (Step a) (Step Substituted) where
+instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool) => Substable (Step a) (Step Substituted) where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
-  substitute delimiters subst (ShellCmd workdir cmd mprop) =
+  substitute delimiters subst (ShellCmd workdir cmd mprop haltOnFailure) =
     ShellCmd
       <$> applySubstitution delimiters subst workdir
       <*> substitute delimiters subst cmd
       <*> Success mprop
+      <*> Success haltOnFailure
 
-instance (StepWorkDirType a ~ String) => Substable (Builder a) (Builder Substituted) where
+instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool) => Substable (Builder a) (Builder Substituted) where
   substitute delimiters subst (Builder _ name steps) =
     Builder ()
       <$> applySubstitution delimiters subst name
@@ -272,7 +278,8 @@ normalize workdir Config{builders, subst} =
           Builder () name (map (normalizeStep (fromMaybe workdir mworkdir)) steps)
         normalizeStep :: String -> Step Parsed -> Step Normalized
         normalizeStep _ SetPropertyFromValue{prop, value} = SetPropertyFromValue{prop, value}
-        normalizeStep defaultWorkdir ShellCmd{workdir=mworkdir, cmd, mprop} =
-          ShellCmd sworkdir' cmd mprop
+        normalizeStep defaultWorkdir ShellCmd{workdir=mworkdir, cmd, mprop, haltOnFailure} =
+          ShellCmd sworkdir' cmd mprop (fromMaybe defaultHaltOnFailure haltOnFailure)
           where sworkdir = fromMaybe defaultWorkdir mworkdir -- take default workdir if Step doesn't specify one
                 sworkdir' = if isAbsolute sworkdir then sworkdir else defaultWorkdir </> sworkdir -- make it absolute
+                defaultHaltOnFailure :: Bool = isNothing mprop -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>

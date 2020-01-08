@@ -1,12 +1,11 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Xml (
-  aProperty
+  aHaltOnFailure
+  , aProperty
   , aValue
   , failWith
   , parseXmlFile
@@ -48,6 +47,7 @@ import Config
 
 -- Attributes
 aCommand = "command"
+aHaltOnFailure = "haltOnFailure"
 aName = "name"
 aProperty = "property"
 aValue = "value"
@@ -173,7 +173,8 @@ zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
       mprop = lookupAttrValue zxml aProperty
   validateShellOrSetPropFromCmd shellOrSetPropertyFromCmd mprop maybeLine
   cmd <- parseAttrValue zxml aCommand (parseCommand . words)
-  return (ShellCmd workdir cmd mprop)
+  haltOnFailure <- parseOptionalBoolAttrValue zxml aHaltOnFailure
+  return (ShellCmd workdir cmd mprop haltOnFailure)
  where
   parseCommand [] = failWith (EmptyCommand maybeLine)
   parseCommand (filepath:args) = pure (Command filepath args)
@@ -308,12 +309,13 @@ stepToXml (SetPropertyFromValue prop value) =
     tSetProperty
     (aProperty =: prop <> aValue =: value)
     []
-stepToXml (ShellCmd workdir cmd mprop) =
+stepToXml (ShellCmd workdir cmd mprop haltOnFailure) =
   element
     tag
     (aCommand =: show cmd
       <> aWorkdir =: workdir
-      <> aProperty =? mprop)
+      <> aProperty =? mprop
+      <> aHaltOnFailure =: show haltOnFailure)
     []
  where
   tag | isJust mprop = tSetPropertyFromCommand
