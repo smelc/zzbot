@@ -136,7 +136,7 @@ runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
   return ctxt'
 
-runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
+runBuild :: (MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
 runBuild (Builder () _ steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
