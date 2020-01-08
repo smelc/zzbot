@@ -9,6 +9,7 @@ module Exec
   ( ProcessEnv(..)
   , MonadExec(..)
   , LogLevel(..)
+  , ProcessMode(..)
   , runBuild
   , process
    ) where
@@ -53,9 +54,7 @@ class Monad m => MonadExec m where
     -> Command                      -- ^ The command to execute
     -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
   putOut   :: String -> m ()
-  putOutLn :: String -> m ()
   putErr   :: String -> m ()
-  putErrLn :: String -> m ()
 
 instance MonadExec IO where
   zzLog logLevel logEntry = hPutDoc handle (annotate style doc)
@@ -74,17 +73,20 @@ instance MonadExec IO where
     createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
 
   putOut   = putStr
-  putOutLn = putStrLn
   putErr   = hPutStr stderr
-  putErrLn = hPutStrLn stderr
 
 instance MonadExec m => MonadExec (ExceptT e m) where
   zzLog textColor logEntry = lift (zzLog textColor logEntry)
   runShellCommand workdir command = lift (runShellCommand workdir command)
   putOut   str = lift (putOut str)
-  putOutLn str = lift (putOutLn str)
   putErr   str = lift (putErr str)
-  putErrLn str = lift (putErrLn str)
+
+
+putOutLn :: MonadExec m => String -> m ()
+putOutLn s = putOut (s ++ "\n")
+
+putErrLn :: MonadExec m => String -> m ()
+putErrLn s = putErr (s ++ "\n")
 
 inject
   :: (Show e, MonadExec m, MonadError ExitCode m)
@@ -135,23 +137,26 @@ runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
   return ctxt'
 
-runBuild :: (Monad m, MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
+runBuild :: (MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
 runBuild (Builder () _ steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
                              }
 
+data ProcessMode = PrintOnly | Execute
+
 process
   :: (MonadExec m, MonadError ExitCode m)
-  => Bool -- ^ Whether to print (True) or execute the builder (False)
+  => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> m ()
-process printOnly env xml = do
-  config <- inject parsingErrorCode (parseXmlString xml)
-  let config' = normalize (Exec.workdir env) config
-  sconfig@Config{builders} <- inject substitutionErrorCode (substAll (sysenv env) config')
-  if printOnly
-    then putOutLn (renderAsXml sconfig)
-    else traverse_ runBuild builders
+process mode ProcessEnv{Exec.workdir, sysenv} xml = do
+  parsedConfig <- inject parsingErrorCode (parseXmlString xml)
+  let normalizedConfig = normalize workdir parsedConfig
+  substitutedConfig@Config{builders} <-
+    inject substitutionErrorCode (substAll sysenv normalizedConfig)
+  case mode of
+    PrintOnly -> putOutLn (renderAsXml substitutedConfig)
+    Execute ->traverse_ runBuild builders

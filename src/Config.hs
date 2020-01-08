@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Config (
   applySubstitution
@@ -270,16 +271,36 @@ substAll env config =
 normalize :: FilePath -- ^ The working directory
           -> Config Parsed -- ^ The input configuration
           -> Config Normalized
-normalize workdir Config{builders, subst} =
-  Config builders' subst
-  where builders' = NE.map normalizeBuilder builders
-        normalizeBuilder :: Builder Parsed -> Builder Normalized
-        normalizeBuilder Builder{workdir=mworkdir, name, steps} =
-          Builder () name (map (normalizeStep (fromMaybe workdir mworkdir)) steps)
-        normalizeStep :: String -> Step Parsed -> Step Normalized
-        normalizeStep _ SetPropertyFromValue{prop, value} = SetPropertyFromValue{prop, value}
-        normalizeStep defaultWorkdir ShellCmd{workdir=mworkdir, cmd, mprop, haltOnFailure} =
-          ShellCmd sworkdir' cmd mprop (fromMaybe defaultHaltOnFailure haltOnFailure)
-          where sworkdir = fromMaybe defaultWorkdir mworkdir -- take default workdir if Step doesn't specify one
-                sworkdir' = if isAbsolute sworkdir then sworkdir else defaultWorkdir </> sworkdir -- make it absolute
-                defaultHaltOnFailure :: Bool = isNothing mprop -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
+normalize userWorkDir Config{builders, subst} =
+  Config (fmap normalizeBuilder builders) subst
+ where
+  prependIfRelative :: FilePath -> FilePath -> FilePath
+  prependIfRelative prefix filepath =
+    if isAbsolute filepath
+      then filepath
+      else prefix </> filepath
+
+  normalizeBuilder :: Builder Parsed -> Builder Normalized
+  normalizeBuilder builder@Builder{workdir=builderWorkDir, name, steps} =
+    builder
+      { workdir = ()
+      , steps = map (normalizeStep absoluteWorkDir) steps
+      }
+   where
+    relativeWorkDir = fromMaybe "" builderWorkDir
+    absoluteWorkDir = prependIfRelative userWorkDir relativeWorkDir
+
+  normalizeStep :: FilePath -> Step Parsed -> Step Normalized
+  normalizeStep _ SetPropertyFromValue{..} = SetPropertyFromValue {..}
+  normalizeStep defaultWorkDir step@ShellCmd{workdir=stepWorkDir, mprop, haltOnFailure} =
+    step
+      { workdir = absoluteWorkDir
+      , haltOnFailure = fromMaybe defaultHaltOnFailure haltOnFailure
+      }
+   where
+    -- take default workdir if Step doesn't specify one
+    relativeWorkDir = fromMaybe "" stepWorkDir
+    -- make it absolute
+    absoluteWorkDir = prependIfRelative defaultWorkDir relativeWorkDir
+    -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
+    defaultHaltOnFailure = isNothing mprop
