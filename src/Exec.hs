@@ -152,10 +152,11 @@ process
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> m ()
-process mode env xml = do
-  config <- inject parsingErrorCode (parseXmlString xml)
-  let config' = normalize (Exec.workdir env) config
-  sconfig@Config{builders} <- inject substitutionErrorCode (substAll (sysenv env) config')
+process mode ProcessEnv{Exec.workdir, sysenv} xml = do
+  parsedConfig <- inject parsingErrorCode (parseXmlString xml)
+  let normalizedConfig = normalize workdir parsedConfig
+  substitutedConfig@Config{builders} <-
+    inject substitutionErrorCode (substAll sysenv normalizedConfig)
   case mode of
-    PrintOnly -> putOutLn (renderAsXml sconfig)
+    PrintOnly -> putOutLn (renderAsXml substitutedConfig)
     Execute ->traverse_ runBuild builders
