@@ -68,11 +68,11 @@ spec =
     it "should set the working directory as specified" $
       runTracingMockExec (runExceptT (process Execute env testXml)) `shouldBe` expectedTrace
   where
-    env = ProcessEnv "testworkdir" []
+    env = ProcessEnv "testworkdir" [("ENV_VAR", "a")]
     testXml =
       "<config>\
       \  <builder name=\"test\" workdir=\"dir1\">\
-      \    <shell command=\"ls a\"/>\
+      \    <shell command=\"ls ${ENV_VAR}\"/>\
       \    <shell workdir=\"dir2\" command=\"ls b\"/>\
       \    <shell command=\"some junk 1\" haltOnFailure=\"False\"/>\
       \    <shell command=\"some junk 2\"/>\
