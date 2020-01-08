@@ -130,8 +130,7 @@ instance Show ValidationError where
     domain = unwords (map fst subst)
 
 class Substable a b where
-    -- The result of applying a substitution (Right) or errors (Left), using the delimiters given as first argument
-    substitute :: (String, String) -> Subst -> a -> ConfigValidation b
+  substitute :: (String, String) -> Subst -> a -> ConfigValidation b
 
 -- split_around 'b' 'foobar' = Just(("foo", "ar"))
 -- splitAround 'f' 'foobar' = Just(("", "oobar"))
@@ -170,27 +169,16 @@ parseVars delimiters text =
         Nothing -> [Left text | not (null text)]
         Just (before, var, after) -> [Left before, Right var] ++ parseVars delimiters after
 
-validateVars :: (String, String) -- ^ The pair of opening and closing delimiters
-             -> Subst            -- ^ The substitution
-             -> String           -- ^ The text to substitute
-             -> [ValidationError] -- ^ A list of errors
-validateVars delimiters subst text =
-    map (KeyNotFound subst) missingVars
-    where allVars = rights (parseVars delimiters text)
-          missingVars = filter (`notElem` map fst subst) allVars
-
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
 applySubstitution :: (String, String) -> Subst -> String -> ConfigValidation String
 applySubstitution delimiters subst text =
-    if not (null errors)
-      then Failure (Set.fromList errors)
-      else Success (concatMap substApplier pieces)
-    where errors :: [ValidationError] = validateVars delimiters subst text
-          pieces :: [Either String VarName] = parseVars delimiters text
-          substApplier :: Either String VarName -> String
-          substApplier (Left text) = text
-          substApplier (Right varName) = fromJust $ lookup varName subst
+  concat <$> traverse substApplier (parseVars delimiters text)
+ where
+  substApplier (Left text) = pure text
+  substApplier (Right varName)
+    | Just value <- lookup varName subst = pure value
+    | otherwise = failWith (KeyNotFound subst varName)
 
 ----------------
 -- Validation --
@@ -208,11 +196,6 @@ duplicates elems = Map.keys (Map.filter (>1) counts)
 ---------------------------------
 -- Implementation of Substable --
 ---------------------------------
-
--- Creates an instance overlapping with the one for lists, because hey
--- String is [Char]!
--- instance Substable String where
---    substitute delimiters subst text = applySubstitution delimiters subst text
 
 -- Lift substitute to traversables
 instance (Traversable t, Substable a b) => Substable (t a) (t b) where
@@ -298,9 +281,7 @@ normalize userWorkDir Config{builders, subst} =
       , haltOnFailure = fromMaybe defaultHaltOnFailure haltOnFailure
       }
    where
-    -- take default workdir if Step doesn't specify one
     relativeWorkDir = fromMaybe "" stepWorkDir
-    -- make it absolute
     absoluteWorkDir = prependIfRelative defaultWorkDir relativeWorkDir
     -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
     defaultHaltOnFailure = isNothing mprop
