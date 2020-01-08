@@ -169,27 +169,16 @@ parseVars delimiters text =
         Nothing -> [Left text | not (null text)]
         Just (before, var, after) -> [Left before, Right var] ++ parseVars delimiters after
 
-validateVars :: (String, String) -- ^ The pair of opening and closing delimiters
-             -> Subst            -- ^ The substitution
-             -> String           -- ^ The text to substitute
-             -> [ValidationError] -- ^ A list of errors
-validateVars delimiters subst text =
-    map (KeyNotFound subst) missingVars
-    where allVars = rights (parseVars delimiters text)
-          missingVars = filter (`notElem` map fst subst) allVars
-
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
 applySubstitution :: (String, String) -> Subst -> String -> ConfigValidation String
 applySubstitution delimiters subst text =
-    if not (null errors)
-      then Failure (Set.fromList errors)
-      else Success (concatMap substApplier pieces)
-    where errors :: [ValidationError] = validateVars delimiters subst text
-          pieces :: [Either String VarName] = parseVars delimiters text
-          substApplier :: Either String VarName -> String
-          substApplier (Left text) = text
-          substApplier (Right varName) = fromJust $ lookup varName subst
+  concat <$> traverse substApplier (parseVars delimiters text)
+ where
+  substApplier (Left text) = pure text
+  substApplier (Right varName)
+    | Just value <- lookup varName subst = pure value
+    | otherwise = failWith (KeyNotFound subst varName)
 
 ----------------
 -- Validation --
