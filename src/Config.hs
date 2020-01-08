@@ -275,10 +275,9 @@ normalize userWorkDir Config{builders, subst} =
   Config (fmap normalizeBuilder builders) subst
  where
   normalizeBuilder :: Builder Parsed -> Builder Normalized
-  normalizeBuilder Builder{workdir=builderWorkDir, name, steps} =
-    Builder
+  normalizeBuilder builder@Builder{workdir=builderWorkDir, name, steps} =
+    builder
       { workdir = ()
-      , name = name
       , steps = map (normalizeStep defaultWorkDir) steps
       }
    where
