@@ -8,6 +8,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Config (
   applySubstitution
@@ -19,8 +20,6 @@ module Config (
   , normalize
   , parseVars
   , Phase(..)
-  , splitAround
-  , splitDelimiters
   , Step(..)
   , Subst
   , Substable(..)
@@ -31,10 +30,14 @@ module Config (
 import Data.Either
 import Data.Foldable
 import Data.List
+import Data.Kind
 import Data.Maybe
 import Data.Validation
-import Data.Kind
+import Data.Void
+import Safe
 import System.FilePath
+import Text.Megaparsec.Char
+import Text.Megaparsec
 import Text.Printf
 
 import qualified Data.List.NonEmpty as NE
@@ -133,42 +136,23 @@ instance Show ValidationError where
 class Substable a b where
   substitute :: (String, String) -> Subst -> a -> ConfigValidation b
 
--- split_around 'b' 'foobar' = Just(("foo", "ar"))
--- splitAround 'f' 'foobar' = Just(("", "oobar"))
--- splitAround 'r' 'foobar' = Just(("fooba", "")
--- splitAround 'c' 'foobar' = Nothing
-splitAround :: String -> String -> Maybe (String, String)
-splitAround sep text =
-  if sep `isPrefixOf` text
-  then Just ("", drop (length sep) text)
-  else let fail = (length sep > length text || null text) in
-    if fail then Nothing
-    else let fst = head text
-             tailResult = splitAround sep (tail text)
-          in case tailResult of
-                Nothing             -> Nothing
-                Just(before, after) -> Just(fst : before, after)
-
--- splitDelimiters ("(", ")") "foo(var)bar" returns Just("foo", "var", "bar")
--- splitDelimiters ("(", ")") "(var)bar" returns Just("", "var", "bar")
--- splitDelimiters ("(", ")") "foo(var)" returns Just("foo", "var")
--- splitDelimiters ("(", ")") "foobar" returns Nothing
-splitDelimiters :: (String, String) -> String -> Maybe (String, String, String)
-splitDelimiters delimiters text = do
-  (beforeOpen, afterOpen) <- splitAround (fst delimiters) text
-  (beforeClose, afterClose) <- splitAround (snd delimiters) afterOpen
-  return (beforeOpen, beforeClose, afterClose)
-
 type VarName = String
 
--- | > parseVars ("(", ")") "foo(bar)chose" = [Left "foo", Right "bar", Left "chose"]
 parseVars :: (String, String) -- ^ The pair of opening and closing delimiters
           -> String           -- ^ The string to parse
           -> [Either String VarName] -- ^ The parsed string, concatenating String content and variable names
-parseVars delimiters text =
-    case splitDelimiters delimiters text of
-        Nothing -> [Left text | not (null text)]
-        Just (before, var, after) -> [Left before, Right var] ++ parseVars delimiters after
+parseVars (open, close) str =
+  fromJustNote "vars should always succeed" (parseMaybe @Void vars str)
+ where
+  vars = do
+    prefix <- many (try textThenVar)
+    suffix <- many anySingle
+    return (concat prefix ++ [Left suffix | not (null suffix)])
+
+  textThenVar = do
+    before <- manyTill anySingle (string open)
+    inside <- manyTill anySingle (string close)
+    return [Left before, Right inside]
 
 -- Replace variables enclosed in delimiters and return the resulting string (Right)
 -- or a list of errors (Left) if some keys are not mapped by the substitution
