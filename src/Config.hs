@@ -33,6 +33,7 @@ import Data.Foldable
 import Data.List
 import Data.Maybe
 import Data.Validation
+import Data.Kind
 import System.FilePath
 import Text.Printf
 
@@ -44,22 +45,22 @@ import qualified Data.Set as Set
 
 data Phase = Parsed | Normalized | Substituted
 
-type family BuilderWorkDirType (p :: Phase) :: * where
+type family BuilderWorkDirType (p :: Phase) :: Type where
   BuilderWorkDirType Parsed = Maybe String
   BuilderWorkDirType Normalized = ()
   BuilderWorkDirType Substituted = ()
 
-type family ConfigSubstType (p :: Phase) :: * where
+type family ConfigSubstType (p :: Phase) :: Type where
   ConfigSubstType Parsed = Subst
   ConfigSubstType Normalized = Subst
   ConfigSubstType Substituted = ()
 
-type family StepHaltOnFailureType (p :: Phase) :: * where
+type family StepHaltOnFailureType (p :: Phase) :: Type where
   StepHaltOnFailureType Parsed = Maybe Bool
   StepHaltOnFailureType Normalized = Bool
   StepHaltOnFailureType Substituted = Bool
 
-type family StepWorkDirType (p :: Phase) :: * where
+type family StepWorkDirType (p :: Phase) :: Type where
   StepWorkDirType Parsed = Maybe String
   StepWorkDirType Normalized = String
   StepWorkDirType Substituted = String
