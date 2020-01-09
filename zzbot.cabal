@@ -22,10 +22,12 @@ library
                      containers,
                      either,
                      filepath,
+                     megaparsec,
                      mtl,
                      prettyprinter,
                      prettyprinter-ansi-terminal,
                      process,
+                     safe,
                      validation,
                      xml
 
