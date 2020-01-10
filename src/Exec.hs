@@ -159,4 +159,4 @@ process mode ProcessEnv{Exec.workdir, sysenv} xml = do
     inject substitutionErrorCode (substAll sysenv normalizedConfig)
   case mode of
     PrintOnly -> putOutLn (renderAsXml substitutedConfig)
-    Execute ->traverse_ runBuild builders
+    Execute -> traverse_ runBuild builders

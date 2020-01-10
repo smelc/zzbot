@@ -12,7 +12,9 @@ cabal-version:       >=1.10
 extra-source-files:  README.md
 
 library
-  exposed-modules:   Config
+  exposed-modules:   Common,
+                     Config
+                     Db,
                      Exec,
                      Xml
   other-modules:
