@@ -30,6 +30,8 @@ library
                      prettyprinter-ansi-terminal,
                      process,
                      safe,
+                     sqlite-simple,
+                     text,
                      validation,
                      xml
 
