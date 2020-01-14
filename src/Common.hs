@@ -7,3 +7,5 @@ data Status =
   | WARN -- ^ Build or step yielded a warning
   | ERROR -- ^ Internal zzbot error
   | CANCELLED -- ^ Build or step was cancelled
+
+dbFile = "state.sqlite"

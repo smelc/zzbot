@@ -9,10 +9,12 @@ import Control.Monad.Except
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
-import Exec
 import System.Directory
 import System.Environment
 import System.Exit
+
+import Db
+import Exec
 import Xml
 
 import qualified Data.List.NonEmpty as NE
