@@ -138,10 +138,8 @@ runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
   return ctxt'
 
-runBuild :: (DbOperations m, MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
-runBuild (Builder () _ steps) = do
-  ensureDB 
-  runSteps Map.empty steps
+runBuild :: (MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
+runBuild (Builder () _ steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
@@ -150,7 +148,7 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 data ProcessMode = PrintOnly | Execute
 
 process
-  :: (DbOperations m, MonadExec m, MonadError ExitCode m)
+  :: (MonadExec m, MonadError ExitCode m)
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process

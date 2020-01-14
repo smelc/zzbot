@@ -36,23 +36,16 @@ tableBuilderName :: String = "name"
 -- TODO smelc Use "PRAGMA journal_mode=WAL;", see lounge's discussion with @polux on January14th; once we have parallel builds
 instance DbOperations IO where
     ensureDB = do
-        connexion <- open dbFile
+        connexion <- open dbFile -- TODO: pass PRAGMA foreign_keys = ON
         execute_ connexion createBuilderTable
         execute_ connexion createBuildTable
         execute_ connexion createStepsTable
         close connexion
       where
         createBuilderTable :: Query = "CREATE TABLE IF NOT EXISTS builder (id INTEGER PRIMARY KEY, TEXT name)"
-        createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY, builder_id INTEGER, TEXT start, TEXT end, TEXT status, FOREIGN KEY(builder_id) REFERENCES builder(id))"
-        createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY, build_id INTEGER, TEXT description, TEXT stdout, TEXT stderr, TEXT status, FOREIGN KEY(build_id) REFERENCES build(id))"
+        createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY, builder_id INTEGER, TEXT start, TEXT end, TEXT status)" -- , FOREIGN KEY(builder_id) REFERENCES builder(id) <- requires custom connexion
+        createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY, build_id INTEGER, TEXT description, TEXT stdout, TEXT stderr, TEXT status)" -- , FOREIGN KEY(build_id) REFERENCES build(id) <- requires custom connexion
     getBuilderID = undefined
     startBuild = undefined
     recordStep = undefined
     endBuild = undefined
-
-instance DbOperations m => DbOperations (ExceptT e m) where
-    ensureDB = lift ensureDB
-    getBuilderID builderName builderID = lift (getBuilderID builderName builderID)
-    startBuild builderID buildID = lift (startBuild builderID buildID)
-    recordStep buildID stdout stderr status = lift (recordStep buildID stdout stderr status)
-    endBuild buildID status = lift (endBuild buildID status)
