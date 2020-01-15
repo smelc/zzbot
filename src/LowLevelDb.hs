@@ -10,9 +10,6 @@ import Common
 import Data.Text
 import Text.Printf
 
-type BuilderID = Int
-type BuildID = Int
-
 -- smelc: I have little experience with databases and hence wanna write
 -- the queries myself, to get a better grasp of the database commands;
 -- before moving on to a DSL for typesafe queries. Hence the use of sqlite-simple

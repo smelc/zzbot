@@ -1,11 +1,15 @@
 module Common where
 
--- | The status of a build and a step
+-- | The status of a build and a step, doc gives a few indications over the ordering's choice
 data Status =
     PASS -- ^ Build or step succeeded
-  | FAIL -- ^ Build or step failed
   | WARN -- ^ Build or step yielded a warning
-  | ERROR -- ^ Internal zzbot error
-  | CANCELLED -- ^ Build or step was cancelled
+  | CANCELLED -- ^ Build or step was cancelled, supersedes warnings
+  | FAIL -- ^ Build or step failed, supersedes cancellation
+  | ERROR -- ^ Internal zzbot error, supersedes everything
+  deriving (Eq, Ord)
 
 dbFile = "state.sqlite"
+
+type BuilderID = Int
+type BuildID = Int
