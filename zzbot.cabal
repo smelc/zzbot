@@ -16,6 +16,7 @@ library
                      Config
                      Db,
                      Exec,
+                     LowLevelDb,
                      Xml
   other-modules:
   hs-source-dirs:    src

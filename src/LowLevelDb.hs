@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Db where
+module LowLevelDb where
 
 import Control.Monad.Except
 import Database.SQLite.Simple
