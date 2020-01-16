@@ -13,7 +13,7 @@ import Text.Printf
 data BuilderField = BuilderField Int Text
   deriving Show
 
-instance FromRow BuilderField where 
+instance FromRow BuilderField where
     fromRow = BuilderField <$> field <*> field
 
 -- smelc: I have little experience with databases and hence wanna write

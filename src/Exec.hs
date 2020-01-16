@@ -82,6 +82,11 @@ instance MonadExec m => MonadExec (ExceptT e m) where
   putOut   str = lift (putOut str)
   putErr   str = lift (putErr str)
 
+instance MonadExec m => MonadExec (UsingLowLevelDb m) where
+  zzLog textColor logEntry = runUsingLowLevelDb (zzLog textColor logEntry)
+  runShellCommand workdir command = runUsingLowLevelDb (runShellCommand workdir command)
+  putOut   str = runUsingLowLevelDb (putOut str)
+  putErr   str = runUsingLowLevelDb (putErr str)
 
 putOutLn :: MonadExec m => String -> m ()
 putOutLn s = putOut (s ++ "\n")
@@ -138,8 +143,8 @@ runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
   return ctxt'
 
-runBuild :: (MonadExec m, MonadError ExitCode m) => Builder Substituted -> m ()
-runBuild (Builder () _ steps) = runSteps Map.empty steps
+runBuild :: (MonadExec m, DbOperations m, MonadError ExitCode m) => Builder Substituted -> m ()
+runBuild (Builder () name steps) = runSteps Map.empty steps
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
@@ -148,7 +153,7 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 data ProcessMode = PrintOnly | Execute
 
 process
-  :: (MonadExec m, MonadError ExitCode m)
+  :: (MonadExec m, DbOperations m, MonadError ExitCode m)
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
