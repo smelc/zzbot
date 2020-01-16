@@ -13,7 +13,7 @@ import Text.Printf
 data BuilderField = BuilderField Int Text
   deriving Show
 
-instance FromRow BuilderField where 
+instance FromRow BuilderField where
     fromRow = BuilderField <$> field <*> field
 
 -- smelc: I have little experience with databases and hence wanna write
@@ -39,7 +39,7 @@ instance LowLevelDbOperations IO where
         execute_ connexion createStepsTable
         close connexion
       where
-        createBuilderTable :: Query = "CREATE TABLE IF NOT EXISTS builder (id INTEGER PRIMARY KEY, TEXT name)"
+        createBuilderTable :: Query = "CREATE TABLE IF NOT EXISTS builder (id INTEGER PRIMARY KEY, name TEXT)"
         createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY, builder_id INTEGER, start TEXT, end TEXT, status TEXT, FOREIGN KEY(builder_id) REFERENCES builder(id))"
         createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY, build_id INTEGER, description TEXT, stdout TEXT, stderr TEXT, status TEX, FOREIGN KEY(build_id) REFERENCES build(id))"
     getBuilderID builderName = do
