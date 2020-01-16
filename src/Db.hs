@@ -20,7 +20,7 @@ class Monad m => DbOperations m where
    addStep :: BuildState -> String -> String -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
-newtype UsingLowLevelDb m a = UsingLowLevelDb { unUsingLowLevelDb :: m a }
+newtype UsingLowLevelDb m a = UsingLowLevelDb { runUsingLowLevelDb :: m a }
  deriving (Functor, Applicative, Monad)
 
 instance DbOperations m => DbOperations (ExceptT a m) where
