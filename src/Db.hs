@@ -30,9 +30,7 @@ instance LowLevelDbOperations m => DbOperations m where
        recordStep buildID stdout stderr status
        return $ Db.snoc buildState $ StepState stdout stderr status
     endBuild buildState@(BuildState _ buildID steps) = do
-       let statuses = map getStepStatus steps
+       let statuses = map (\(StepState _ _ s) -> s) steps
            status = foldr max Success statuses
        LowLevelDb.endBuild buildID status
        return status
-       where getStepStatus :: StepState -> Status
-             getStepStatus (StepState _ _ s) = s
