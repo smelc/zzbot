@@ -83,10 +83,10 @@ instance MonadExec m => MonadExec (ExceptT e m) where
   putErr   str = lift (putErr str)
 
 instance MonadExec m => MonadExec (UsingLowLevelDb m) where
-  zzLog textColor logEntry = runUsingLowLevelDb (zzLog textColor logEntry)
-  runShellCommand workdir command = runUsingLowLevelDb (runShellCommand workdir command)
-  putOut   str = runUsingLowLevelDb (putOut str)
-  putErr   str = runUsingLowLevelDb (putErr str)
+  zzLog textColor logEntry = UsingLowLevelDb (zzLog textColor logEntry)
+  runShellCommand workdir command = UsingLowLevelDb (runShellCommand workdir command)
+  putOut   str = UsingLowLevelDb (putOut str)
+  putErr   str = UsingLowLevelDb (putErr str)
 
 putOutLn :: MonadExec m => String -> m ()
 putOutLn s = putOut (s ++ "\n")
