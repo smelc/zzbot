@@ -1,8 +1,9 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Db where
 
+import Control.Monad.Except
+import Data.Kind
 import Data.List.Extra
 
 import Common
@@ -20,16 +21,19 @@ class DbOperations m where
    addStep :: BuildState -> String -> String -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
-instance LowLevelDbOperations m => DbOperations m where
-    startBuild builderName = do
+newtype UsingLowLevelDb m a = UsingLowLevelDb { unUsingLowLevelDb :: m a }
+ deriving (Functor, Applicative, Monad)
+
+instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
+    startBuild builderName = UsingLowLevelDb $ do
        ensureDB
        builderID <- getBuilderID builderName
        buildID <- LowLevelDb.startBuild builderID
        return $ BuildState builderID buildID []
-    addStep buildState@(BuildState _ buildID _) stdout stderr status = do
+    addStep buildState@(BuildState _ buildID _) stdout stderr status = UsingLowLevelDb $ do
        recordStep buildID stdout stderr status
        return $ Db.snoc buildState $ StepState stdout stderr status
-    endBuild buildState@(BuildState _ buildID steps) = do
+    endBuild buildState@(BuildState _ buildID steps) = UsingLowLevelDb $ do
        let statuses = map (\(StepState _ _ s) -> s) steps
            status = foldr max Success statuses
        LowLevelDb.endBuild buildID status
