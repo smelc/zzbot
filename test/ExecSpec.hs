@@ -2,9 +2,11 @@
 
 module ExecSpec (spec) where
 
+import Common (Status(Success))
 import Config
 import Control.Monad.Writer
 import Control.Monad.Except
+import Db
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Exec
 import System.Exit
@@ -32,13 +34,15 @@ runLoggingMockExec :: LoggingMockExec a -> (a, [LogEntry])
 runLoggingMockExec (LoggingMockExec m) = runWriter m
 
 instance MonadExec LoggingMockExec where
-
   zzLog level entry = tell [Message level entry]
-
   runShellCommand _ cmd = return (mockShellCommand cmd)
-
   putOut   str = tell [StdOut str]
   putErr   str = tell [StdErr str]
+
+instance DbOperations LoggingMockExec where
+   startBuild name = return (BuildState 0 0 [])
+   addStep state stdout stderr status = return state
+   endBuild state = return Success
 
 -- Tracing mock exec
 
@@ -58,6 +62,11 @@ instance MonadExec TracingMockExec where
     return (mockShellCommand command)
   putOut   str = return ()
   putErr   str = return ()
+
+instance DbOperations TracingMockExec where
+   startBuild name = return (BuildState 0 0 [])
+   addStep state stdout stderr status = return state
+   endBuild state = return Success
 
 -- Tests
 

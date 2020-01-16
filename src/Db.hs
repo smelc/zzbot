@@ -2,6 +2,7 @@
 
 module Db where
 
+import Control.Monad.Except
 import Data.List.Extra
 
 import Common
@@ -14,13 +15,18 @@ snoc :: BuildState -> StepState -> BuildState
 snoc (BuildState builderID buildID steps) stepState =
    BuildState builderID buildID $ Data.List.Extra.snoc steps stepState
 
-class DbOperations m where
+class Monad m => DbOperations m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
    addStep :: BuildState -> String -> String -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
 newtype UsingLowLevelDb m a = UsingLowLevelDb { unUsingLowLevelDb :: m a }
  deriving (Functor, Applicative, Monad)
+
+instance DbOperations m => DbOperations (ExceptT a m) where
+   startBuild name = lift (Db.startBuild name)
+   addStep state stdout stderr status = lift (addStep state stdout stderr status)
+   endBuild state = lift (Db.endBuild state)
 
 instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
     startBuild builderName = UsingLowLevelDb $ do
