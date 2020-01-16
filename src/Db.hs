@@ -2,8 +2,6 @@
 
 module Db where
 
-import Control.Monad.Except
-import Data.Kind
 import Data.List.Extra
 
 import Common
