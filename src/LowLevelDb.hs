@@ -11,6 +11,9 @@ import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
 import Database.SQLite.Simple
+import Data.List.Index
+import Data.Time.Clock
+import Data.Time.ISO8601
 
 import Common
 import Text.Printf
@@ -30,8 +33,7 @@ instance FromRow BuilderField where
 
 -- | The database's structure is documented at the repo's root DEV.md file
 class Monad m => LowLevelDbOperations m where
-    getBuilderID :: String -> m BuilderID -- ^ Given a builder's name, get the primary key for it
-    startBuild :: BuilderID -> m BuildID -- ^ Given a builder's ID, get a fresh ID for a starting build. Sets the start date.
+    startBuild :: String -> m BuildID -- ^ Given a builder's name, get a fresh ID for a starting build. Sets the start date.
     recordStep :: BuildID -> String -> String -> Status -> m () -- ^ Records a step's execution
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
@@ -54,25 +56,27 @@ createDatabase = do
   connexion <- open dbFile
   execute_ connexion "PRAGMA journal_mode=WAL;"
   execute_ connexion "PRAGMA foreign_keys=ON;"
-  execute_ connexion createBuilderTable
   execute_ connexion createBuildTable
   execute_ connexion createStepsTable
   return (Database connexion)
  where
-  createBuilderTable :: Query = "CREATE TABLE IF NOT EXISTS builder (id INTEGER PRIMARY KEY, name TEXT)"
-  createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY, builder_id INTEGER, start TEXT, end TEXT, status TEXT, FOREIGN KEY(builder_id) REFERENCES builder(id))"
-  createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY, build_id INTEGER, description TEXT, stdout TEXT, stderr TEXT, status TEX, FOREIGN KEY(build_id) REFERENCES build(id))"
+  createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (builder TEXT NOT NULL, start TEXT NOT NULL, end TEXT, status TEXT)"
+  createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY NOT NULL, build_id TEXT NOT NULL, description TEXT NOT NULL, stdout TEXT NOT NULL, stderr TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY(build_id) REFERENCES build(builder))"
+
+-- | Stores a date in sqlite so that sqlite understands it, using
+-- the format described here: https://www.sqlitetutorial.net/sqlite-date/
+getSqliteISO8601Time :: IO String
+getSqliteISO8601Time = do
+  now <- getCurrentTime
+  let iso8601 = take 24 $ formatISO8601Nanos now
+  return $ setAt 10 ' ' iso8601 
 
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
-    getBuilderID builderName = UsingIOForDb $ do
+    startBuild builderName = UsingIOForDb $ do
         Database connexion <- ask
         liftIO $ do
-          rows :: [Only Int] <- queryNamed connexion "SELECT id FROM builder WHERE NAME=:name LIMIT 1" [":name" := builderName]
-          case rows of
-            (Only id : _) -> return id
-            [] -> do
-             execute connexion "INSERT INTO builder (name) VALUES (?)" (Only builderName)
-             fromIntegral <$> lastInsertRowId connexion
-    startBuild builderId = undefined
+          now <- getSqliteISO8601Time
+          execute connexion "INSERT INTO build (builder, start) VALUES (?, ?)" [builderName, now]
+          fromIntegral <$> lastInsertRowId connexion
     recordStep = undefined
     endBuild = undefined

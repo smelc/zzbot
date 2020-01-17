@@ -1,29 +1,23 @@
 # Database
 
--------------------------
--      builder          -
--------------------------
-- ID:Int   primary key  -
-- name:String           -
--------------------------
+NN=NOT NULL
 
--------------------------
--      build            -
--------------------------
-- ID:Int   primary key  -
-- builder_id:Int        - -> refers to a builder's primary key
-- start:Date            -
-- end:Date              -
-- status:String         -
--------------------------
+---------------------------------
+-      build                    -
+---------------------------------
+- builder:String primary key NN -
+- start:Date NN                 -
+- end:Date                      -
+- status:String                 -
+---------------------------------
 
 -------------------------
 -      steps            -
 -------------------------
-- ID:Int   primary key  -
-- build_id:Int          - -> refers to a build's primary key
-- description:String    -
-- stdout:String         -
-- stderr:String         -
-- status:String         -
+- ID:Int primary key NN -
+- build_id:String NN    - -> refers to a build's primary key
+- description:String NN -
+- stdout:String NN      -
+- stderr:String NN      -
+- status:String NN      -
 -------------------------

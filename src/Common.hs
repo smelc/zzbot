@@ -11,5 +11,4 @@ data Status =
 
 dbFile = "state.sqlite"
 
-type BuilderID = Int
 type BuildID = Int

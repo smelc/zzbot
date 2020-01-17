@@ -12,11 +12,11 @@ import Common
 import LowLevelDb
 
 data StepState = StepState String String Status -- ^ stdout, stderr, status
-data BuildState = BuildState BuilderID BuildID [StepState]
+data BuildState = BuildState BuildID [StepState]
 
 snoc :: BuildState -> StepState -> BuildState
-snoc (BuildState builderID buildID steps) stepState =
-   BuildState builderID buildID $ Data.List.Extra.snoc steps stepState
+snoc (BuildState buildID steps) stepState =
+   BuildState buildID $ Data.List.Extra.snoc steps stepState
 
 class Monad m => DbOperations m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
@@ -40,13 +40,12 @@ instance DbOperations m => DbOperations (ExceptT a m) where
 
 instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
     startBuild builderName = UsingLowLevelDb $ do
-       builderID <- getBuilderID builderName
-       buildID <- LowLevelDb.startBuild builderID
-       return $ BuildState builderID buildID []
-    addStep buildState@(BuildState _ buildID _) stdout stderr status = UsingLowLevelDb $ do
+       buildID <- LowLevelDb.startBuild builderName
+       return $ BuildState buildID []
+    addStep buildState@(BuildState buildID _) stdout stderr status = UsingLowLevelDb $ do
        recordStep buildID stdout stderr status
        return $ Db.snoc buildState $ StepState stdout stderr status
-    endBuild buildState@(BuildState _ buildID steps) = UsingLowLevelDb $ do
+    endBuild buildState@(BuildState buildID steps) = UsingLowLevelDb $ do
        let statuses = map (\(StepState _ _ s) -> s) steps
            status = foldr max Success statuses
        LowLevelDb.endBuild buildID status
