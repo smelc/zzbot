@@ -14,6 +14,7 @@ import System.Environment
 import System.Exit
 
 import Db
+import LowLevelDb
 import Exec
 import Xml
 
@@ -42,12 +43,15 @@ optionsParser =
 optionsParserInfo :: Opt.ParserInfo Options
 optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
+runConcreteStack :: UsingIOForExec (UsingLowLevelDb (UsingIOForDb (ExceptT ExitCode IO))) a -> IO (Either ExitCode a)
+runConcreteStack = runExceptT . runUsingIOForDb . runUsingLowLevelDb . runUsingIOForExec
+
 main :: IO ()
 main = do
   Options{optFilenames, optProcessMode} <- Opt.execParser optionsParserInfo
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
-  res <- runUsingLowLevelDb $ runExceptT $ traverse (process optProcessMode env) xmls
+  res <- runConcreteStack $ traverse (process optProcessMode env) xmls
   case res of
     Left code -> exitWith code
     _ -> return ()

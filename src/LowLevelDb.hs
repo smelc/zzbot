@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module LowLevelDb where
 
@@ -29,8 +33,25 @@ class Monad m => LowLevelDbOperations m where
     recordStep :: BuildID -> String -> String -> Status -> m () -- ^ Records a step's execution
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
-instance LowLevelDbOperations IO where
-    ensureDB = do
+instance LowLevelDbOperations m => LowLevelDbOperations (ExceptT e m) where
+    ensureDB = lift ensureDB
+    getBuilderID builderName = lift (getBuilderID builderName)
+    startBuild builderId = lift (startBuild builderId)
+    recordStep buildId stdout stderr status = lift (recordStep buildId stdout stderr status )
+    endBuild buildId status = lift (endBuild buildId status)
+
+newtype UsingIOForDb m a = UsingIOForDb { runUsingIOForDb :: m a }
+ deriving (Functor, Applicative, Monad)
+
+instance MonadError e m => MonadError e (UsingIOForDb m) where
+  throwError e = UsingIOForDb (throwError e)
+  catchError m h = UsingIOForDb $ catchError (runUsingIOForDb m) (runUsingIOForDb . h)
+
+instance MonadIO m => MonadIO (UsingIOForDb m) where
+  liftIO f = UsingIOForDb (liftIO f)
+
+instance MonadIO m => LowLevelDbOperations (UsingIOForDb m) where
+    ensureDB = UsingIOForDb $ liftIO $ do
         connexion <- open dbFile
         execute_ connexion "PRAGMA journal_mode=WAL;"
         execute_ connexion "PRAGMA foreign_keys=ON;"
@@ -42,7 +63,7 @@ instance LowLevelDbOperations IO where
         createBuilderTable :: Query = "CREATE TABLE IF NOT EXISTS builder (id INTEGER PRIMARY KEY, name TEXT)"
         createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY, builder_id INTEGER, start TEXT, end TEXT, status TEXT, FOREIGN KEY(builder_id) REFERENCES builder(id))"
         createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY, build_id INTEGER, description TEXT, stdout TEXT, stderr TEXT, status TEX, FOREIGN KEY(build_id) REFERENCES build(id))"
-    getBuilderID builderName = do
+    getBuilderID builderName = UsingIOForDb $ liftIO $ do
         connexion <- open dbFile
         r :: [BuilderField] <- queryNamed connexion "SELECT * FROM builder WHERE NAME=:name" [":name" := builderName]
         -- TODO smelc Condition over r's being non empty
