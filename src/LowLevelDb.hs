@@ -33,12 +33,6 @@ class Monad m => LowLevelDbOperations m where
     recordStep :: BuildID -> String -> String -> Status -> m () -- ^ Records a step's execution
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
-instance LowLevelDbOperations m => LowLevelDbOperations (ExceptT e m) where
-    getBuilderID builderName = lift (getBuilderID builderName)
-    startBuild builderId = lift (startBuild builderId)
-    recordStep buildId stdout stderr status = lift (recordStep buildId stdout stderr status )
-    endBuild buildId status = lift (endBuild buildId status)
-
 newtype UsingIOForDb m a = UsingIOForDb { runUsingIOForDb :: m a }
  deriving (Functor, Applicative, Monad)
 
