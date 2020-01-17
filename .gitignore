@@ -2,6 +2,8 @@ html/
 
 # database
 state.sqlite
+state.sqlite-shm
+state.sqlite-wal
 
 # doc
 doc/build/index.html

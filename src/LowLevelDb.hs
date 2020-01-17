@@ -7,15 +7,18 @@
 
 module LowLevelDb where
 
+import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
 import Database.SQLite.Simple
+import GHC.Int
 
 import Common
-import Data.Text
 import Text.Printf
 
-data BuilderField = BuilderField Int Text
+import qualified Data.Text as Text
+
+data BuilderField = BuilderField Int Text.Text
   deriving Show
 
 instance FromRow BuilderField where
@@ -64,12 +67,20 @@ createDatabase = do
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
     getBuilderID builderName = UsingIOForDb $ do
         Database connexion <- ask
-        liftIO $ do
-          r :: [BuilderField] <- queryNamed connexion "SELECT * FROM builder WHERE NAME=:name" [":name" := builderName]
-          -- TODO smelc Condition over r's being non empty
-          -- TODO smelc get at most one result
-          liftIO $ print $ show r
-        return 0
+        liftIO $ helper builderName connexion
+        where builderFieldToID (BuilderField id _) = id
+              -- fromInt64ToInt = fromIntegral
+              helper :: String -> Connection -> IO Int
+              helper builderName connexion = do
+                rows :: [BuilderField] <- queryNamed connexion "SELECT * FROM builder WHERE NAME=:name LIMIT 1" [":name" := builderName]
+                if not $ null rows
+                then evaluate $ builderFieldToID $ head rows -- is this idiomatic?
+                else do
+                    execute connexion "INSERT INTO builder (name) VALUES (?)" (Only builderName)
+                    res :: GHC.Int.Int64 <- lastInsertRowId connexion
+                    -- TODO smelc why do I get an Int64? At first glance sqlite-simple doesn't
+                    -- describe this behavior in its top level doc, am I missing something?
+                    undefined
     startBuild builderId = undefined
     recordStep = undefined
     endBuild = undefined
