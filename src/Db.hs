@@ -40,7 +40,6 @@ instance DbOperations m => DbOperations (ExceptT a m) where
 
 instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
     startBuild builderName = UsingLowLevelDb $ do
-       ensureDB
        builderID <- getBuilderID builderName
        buildID <- LowLevelDb.startBuild builderID
        return $ BuildState builderID buildID []

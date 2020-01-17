@@ -6,6 +6,7 @@ module Main where
 import Config
 import Control.Applicative
 import Control.Monad.Except
+import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
@@ -43,15 +44,28 @@ optionsParser =
 optionsParserInfo :: Opt.ParserInfo Options
 optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
-runConcreteStack :: UsingIOForExec (UsingLowLevelDb (UsingIOForDb (ExceptT ExitCode IO))) a -> IO (Either ExitCode a)
-runConcreteStack = runExceptT . runUsingIOForDb . runUsingLowLevelDb . runUsingIOForExec
+runConcreteStack
+  :: Database
+  -> UsingIOForExec
+       ( UsingLowLevelDb
+           (UsingIOForDb (ReaderT Database (ExceptT ExitCode IO)))
+       )
+       a
+  -> IO (Either ExitCode a)
+runConcreteStack db =
+  runExceptT
+    . flip runReaderT db
+    . runUsingIOForDb
+    . runUsingLowLevelDb
+    . runUsingIOForExec
 
 main :: IO ()
 main = do
   Options{optFilenames, optProcessMode} <- Opt.execParser optionsParserInfo
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
-  res <- runConcreteStack $ traverse (process optProcessMode env) xmls
+  database <- createDatabase
+  res <- runConcreteStack database $ traverse (process optProcessMode env) xmls
   case res of
     Left code -> exitWith code
     _ -> return ()
