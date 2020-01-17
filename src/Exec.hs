@@ -155,9 +155,11 @@ runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   return ctxt'
 
 runBuild :: (MonadExec m, DbOperations m, MonadError ExitCode m) => Builder Substituted -> m ()
-runBuild (Builder () name steps) = -- do
-  -- startBuild name
+runBuild (Builder () name steps) = do
+  buildID <- startBuild name
   runSteps Map.empty steps
+  endBuild buildID
+  return ()
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment

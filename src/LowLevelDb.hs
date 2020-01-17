@@ -14,17 +14,12 @@ import Database.SQLite.Simple
 import Data.List.Index
 import Data.Time.Clock
 import Data.Time.ISO8601
+import Debug.Trace
 
 import Common
 import Text.Printf
 
 import qualified Data.Text as Text
-
-data BuilderField = BuilderField Int Text.Text
-  deriving Show
-
-instance FromRow BuilderField where
-    fromRow = BuilderField <$> field <*> field
 
 -- smelc: I have little experience with databases and hence wanna write
 -- the queries myself, to get a better grasp of the database commands;
@@ -33,7 +28,7 @@ instance FromRow BuilderField where
 
 -- | The database's structure is documented at the repo's root DEV.md file
 class Monad m => LowLevelDbOperations m where
-    startBuild :: String -> m BuildID -- ^ Given a builder's name, get a fresh ID for a starting build. Sets the start date.
+    startBuild :: String -> m BuildID -- ^ Records start of build with given name, returning the new build's ID.
     recordStep :: BuildID -> String -> String -> Status -> m () -- ^ Records a step's execution
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
@@ -60,7 +55,7 @@ createDatabase = do
   execute_ connexion createStepsTable
   return (Database connexion)
  where
-  createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (builder TEXT NOT NULL, start TEXT NOT NULL, end TEXT, status TEXT)"
+  createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY NOT NULL, builder TEXT NOT NULL, start TEXT NOT NULL, end TEXT, status TEXT)"
   createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY NOT NULL, build_id TEXT NOT NULL, description TEXT NOT NULL, stdout TEXT NOT NULL, stderr TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY(build_id) REFERENCES build(builder))"
 
 -- | Stores a date in sqlite so that sqlite understands it, using
@@ -73,10 +68,18 @@ getSqliteISO8601Time = do
 
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
     startBuild builderName = UsingIOForDb $ do
-        Database connexion <- ask
-        liftIO $ do
-          now <- getSqliteISO8601Time
-          execute connexion "INSERT INTO build (builder, start) VALUES (?, ?)" [builderName, now]
-          fromIntegral <$> lastInsertRowId connexion
+      Database connexion <- ask
+      liftIO $ do
+        now <- getSqliteISO8601Time
+        execute connexion "INSERT INTO build (builder, start) VALUES (?, ?)" [builderName, now]
+        fromIntegral <$> lastInsertRowId connexion
     recordStep = undefined
-    endBuild = undefined
+    endBuild buildID status = UsingIOForDb $ do
+      Database connexion <- ask
+      liftIO $ do
+        now <- trace "about to close" getSqliteISO8601Time
+        let argsList = [":end" := now, ":status" := show status, ":id" := buildID]
+        -- TODO smelc: this makes sqlite crash with "SQLite3 returned ErrorIO while attempting to perform step: disk I/O error"
+        -- executeNamed connexion "UPDATE build SET end = :end, status = :status WHERE id = :id " argsList
+        -- close connexion
+        return ()
