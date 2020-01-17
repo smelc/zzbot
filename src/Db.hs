@@ -1,4 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Db where
 
@@ -23,6 +26,13 @@ class Monad m => DbOperations m where
 newtype UsingLowLevelDb m a = UsingLowLevelDb { runUsingLowLevelDb :: m a }
  deriving (Functor, Applicative, Monad)
 
+instance MonadIO m => MonadIO (UsingLowLevelDb m) where
+  liftIO f = UsingLowLevelDb (liftIO f)
+
+instance MonadError e m => MonadError e (UsingLowLevelDb m) where
+  throwError e = UsingLowLevelDb (throwError e)
+  catchError m h = UsingLowLevelDb $ catchError (runUsingLowLevelDb m) (runUsingLowLevelDb . h)
+
 instance DbOperations m => DbOperations (ExceptT a m) where
    startBuild name = lift (Db.startBuild name)
    addStep state stdout stderr status = lift (addStep state stdout stderr status)
@@ -30,7 +40,6 @@ instance DbOperations m => DbOperations (ExceptT a m) where
 
 instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
     startBuild builderName = UsingLowLevelDb $ do
-       ensureDB
        builderID <- getBuilderID builderName
        buildID <- LowLevelDb.startBuild builderID
        return $ BuildState builderID buildID []

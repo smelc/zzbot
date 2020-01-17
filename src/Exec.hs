@@ -1,8 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- File to execute a build specified as a Builder
 module Exec
@@ -10,6 +14,7 @@ module Exec
   , MonadExec(..)
   , LogLevel(..)
   , ProcessMode(..)
+  , UsingIOForExec(..)
   , runBuild
   , process
    ) where
@@ -57,8 +62,20 @@ class Monad m => MonadExec m where
   putOut   :: String -> m ()
   putErr   :: String -> m ()
 
-instance MonadExec IO where
-  zzLog logLevel logEntry = hPutDoc handle (annotate style doc)
+newtype UsingIOForExec m a = UsingIOForExec { runUsingIOForExec :: m a }
+ deriving (Functor, Applicative, Monad)
+
+instance DbOperations m => DbOperations (UsingIOForExec m) where
+   startBuild name = UsingIOForExec (Db.startBuild name)
+   addStep state stdout stderr status = UsingIOForExec (addStep state stdout stderr status)
+   endBuild state = UsingIOForExec (Db.endBuild state)
+
+instance MonadError e m => MonadError e (UsingIOForExec m) where
+  throwError e = UsingIOForExec (throwError e)
+  catchError m h = UsingIOForExec $ catchError (runUsingIOForExec m) (runUsingIOForExec . h)
+
+instance (Monad m, MonadIO m) => MonadExec (UsingIOForExec m) where
+  zzLog logLevel logEntry = UsingIOForExec $ liftIO $ hPutDoc handle (annotate style doc)
    where
     doc = "ZZ>" <+> pretty logEntry <> hardline
     handle
@@ -69,24 +86,18 @@ instance MonadExec IO where
       | Error <- logLevel = color Red
 
   runShellCommand workdir Command{cmdFilename, cmdArgs} =
-    readCreateProcessWithExitCode createProcess ""
+    UsingIOForExec $ liftIO $ readCreateProcessWithExitCode createProcess ""
    where
     createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
 
-  putOut   = putStr
-  putErr   = hPutStr stderr
+  putOut = UsingIOForExec . liftIO . putStr
+  putErr = UsingIOForExec . liftIO . hPutStr stderr
 
 instance MonadExec m => MonadExec (ExceptT e m) where
   zzLog textColor logEntry = lift (zzLog textColor logEntry)
   runShellCommand workdir command = lift (runShellCommand workdir command)
   putOut   str = lift (putOut str)
   putErr   str = lift (putErr str)
-
-instance MonadExec m => MonadExec (UsingLowLevelDb m) where
-  zzLog textColor logEntry = UsingLowLevelDb (zzLog textColor logEntry)
-  runShellCommand workdir command = UsingLowLevelDb (runShellCommand workdir command)
-  putOut   str = UsingLowLevelDb (putOut str)
-  putErr   str = UsingLowLevelDb (putErr str)
 
 putOutLn :: MonadExec m => String -> m ()
 putOutLn s = putOut (s ++ "\n")
