@@ -40,7 +40,7 @@ instance MonadExec LoggingMockExec where
   putErr   str = tell [StdErr str]
 
 instance DbOperations LoggingMockExec where
-   startBuild name = return (BuildState 0 0 [])
+   startBuild name = return (BuildState 0 [])
    addStep state stdout stderr status = return state
    endBuild state = return Success
 
@@ -64,7 +64,7 @@ instance MonadExec TracingMockExec where
   putErr   str = return ()
 
 instance DbOperations TracingMockExec where
-   startBuild name = return (BuildState 0 0 [])
+   startBuild name = return (BuildState 0 [])
    addStep state stdout stderr status = return state
    endBuild state = return Success
 
