@@ -73,4 +73,3 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
       liftIO $ do
         let argsList = [":status" := show status, ":id" := buildID]
         executeNamed connexion "UPDATE build SET end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'), status = :status WHERE id = :id" argsList
-        return ()
