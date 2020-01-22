@@ -58,18 +58,50 @@ withDatabase filepath action =
     execute_ connexion createStepsTable
     action (Database connexion)
  where
-  createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY NOT NULL, builder TEXT NOT NULL, start TEXT NOT NULL, end TEXT, status TEXT)"
-  createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY NOT NULL, build_id TEXT NOT NULL, description TEXT NOT NULL, stdout TEXT NOT NULL, stderr TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY(build_id) REFERENCES build(builder))"
+  createBuildTable :: Query =
+    "CREATE TABLE IF NOT EXISTS build\
+    \  ( id INTEGER PRIMARY KEY NOT NULL\
+    \  , builder TEXT NOT NULL\
+    \  , start TEXT NOT NULL\
+    \  , end TEXT\
+    \  , status TEXT\
+    \  )"
+  createStepsTable :: Query =
+    "CREATE TABLE IF NOT EXISTS step\
+    \  ( id INTEGER PRIMARY KEY NOT NULL\
+    \  , build_id TEXT NOT NULL\
+    \  , description TEXT NOT NULL\
+    \  , stdout TEXT NOT NULL\
+    \  , stderr TEXT NOT NULL\
+    \  , status TEXT NOT NULL\
+    \  , FOREIGN KEY(build_id) REFERENCES build(builder)\
+    \  )"
 
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
     startBuild builderName = UsingIOForDb $ do
       Database connexion <- ask
       liftIO $ do
-        execute connexion "INSERT INTO build (builder, start) VALUES (?, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))" $ Only builderName
+        executeNamed connexion query args
         fromIntegral <$> lastInsertRowId connexion
+     where
+      query =
+        "INSERT INTO build (builder, start)\
+        \VALUES (:builder, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
+      args =
+        [ ":builder" := builderName ]
+
     recordStep = undefined
+
     endBuild buildID status = UsingIOForDb $ do
       Database connexion <- ask
-      liftIO $ do
-        let argsList = [":status" := show status, ":id" := buildID]
-        executeNamed connexion "UPDATE build SET end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'), status = :status WHERE id = :id" argsList
+      liftIO $ executeNamed connexion query args
+     where
+      query =
+        "UPDATE build SET\
+        \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
+        \  status = :status WHERE id = :id"
+      args =
+        [ ":status" := show status
+        , ":id" := buildID
+        ]
+
