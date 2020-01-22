@@ -9,6 +9,4 @@ data Status =
   | Error -- ^ Internal zzbot error, supersedes everything
   deriving (Eq, Ord, Show)
 
-dbFile = "state.sqlite"
-
 type BuildID = Int

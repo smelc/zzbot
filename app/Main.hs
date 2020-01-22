@@ -28,6 +28,7 @@ import qualified Options.Applicative as Opt
 data Options = Options
   { optFilenames :: NonEmpty String
   , optProcessMode :: ProcessMode
+  , optDatabasePath :: FilePath
   }
 
 optionsParser :: Opt.Parser Options
@@ -40,6 +41,12 @@ optionsParser =
           (Opt.long "print"
              <> Opt.short 'p'
              <> Opt.help "print the builder's interpretation, but do not execute it")
+    <*> Opt.strOption
+          (Opt.long "database"
+            <> Opt.help "The sqlite database to use"
+            <> Opt.value "state.sqlite"
+            <> Opt.metavar "DATABASE"
+            <> Opt.showDefault)
 
 optionsParserInfo :: Opt.ParserInfo Options
 optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
@@ -61,11 +68,12 @@ runConcreteStack db =
 
 main :: IO ()
 main = do
-  Options{optFilenames, optProcessMode} <- Opt.execParser optionsParserInfo
+  Options{optFilenames, optProcessMode, optDatabasePath} <-
+    Opt.execParser optionsParserInfo
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
-  database <- createDatabase
-  res <- runConcreteStack database $ traverse (process optProcessMode env) xmls
-  case res of
-    Left code -> exitWith code
-    _ -> return ()
+  withDatabase optDatabasePath $ \db -> do
+    res <- runConcreteStack db $ traverse (process optProcessMode env) xmls
+    case res of
+      Left code -> exitWith code
+      _ -> return ()
