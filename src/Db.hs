@@ -11,16 +11,16 @@ import Data.List.Extra
 import Common
 import LowLevelDb
 
-data StepState = StepState String String Status -- ^ stdout, stderr, status
-data BuildState = BuildState BuildID [StepState]
+data BuildState = BuildState BuildID [Status]
 
-snoc :: BuildState -> StepState -> BuildState
-snoc (BuildState buildID steps) stepState =
-   BuildState buildID $ Data.List.Extra.snoc steps stepState
+snoc :: BuildState -> Status -> BuildState
+snoc (BuildState buildID statuses) status =
+   BuildState buildID $ Data.List.Extra.snoc statuses status
 
 class Monad m => DbOperations m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
-   addStep :: BuildState -> String -> String -> Status -> m BuildState -- ^ stdout, stderr, step status
+   startStep :: BuildState -> String -> m StepID -- ^ The string is the step's description
+   endStep :: BuildState -> StepID -> String -> String -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
 newtype UsingLowLevelDb m a = UsingLowLevelDb { runUsingLowLevelDb :: m a }
@@ -35,18 +35,20 @@ instance MonadError e m => MonadError e (UsingLowLevelDb m) where
 
 instance DbOperations m => DbOperations (ExceptT a m) where
    startBuild name = lift (Db.startBuild name)
-   addStep state stdout stderr status = lift (addStep state stdout stderr status)
+   startStep state desc = lift (Db.startStep state desc)
+   endStep state stepID stdout stderr status = lift (Db.endStep state stepID stdout stderr status)
    endBuild state = lift (Db.endBuild state)
 
 instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
     startBuild builderName = UsingLowLevelDb $ do
        buildID <- LowLevelDb.startBuild builderName
        return $ BuildState buildID []
-    addStep buildState@(BuildState buildID _) stdout stderr status = UsingLowLevelDb $ do
-       recordStep buildID stdout stderr status
-       return $ Db.snoc buildState $ StepState stdout stderr status
-    endBuild buildState@(BuildState buildID steps) = UsingLowLevelDb $ do
-       let statuses = map (\(StepState _ _ s) -> s) steps
-           status = foldr max Success statuses
+    startStep buildState@(BuildState buildID _) desc = UsingLowLevelDb $
+       LowLevelDb.startStep buildID desc
+    endStep buildState@(BuildState buildID steps) stepID stdout stderr status = UsingLowLevelDb $ do
+       LowLevelDb.endStep stepID stdout stderr status
+       return $ Db.snoc buildState status
+    endBuild buildState@(BuildState buildID statuses) = UsingLowLevelDb $ do
+       let status = foldr max Success statuses
        LowLevelDb.endBuild buildID status
        return status

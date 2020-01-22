@@ -9,4 +9,5 @@ data Status =
   | Error -- ^ Internal zzbot error, supersedes everything
   deriving (Eq, Ord, Show)
 
-type BuildID = Int
+type BuildID = Int -- ^ The unique identifier of a build
+type StepID = Int -- ^ The unique identifier of a step

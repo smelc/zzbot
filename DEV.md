@@ -13,12 +13,14 @@ NN=NOT NULL
 ---------------------------------
 
 -------------------------
--      steps            -
+-      step             -
 -------------------------
 - ID:Int primary key NN -
 - build_id:Int NN       - -> refers to a build's primary key
 - description:String NN -
-- stdout:String NN      -
-- stderr:String NN      -
-- status:String NN      -
+- start:Date NN         -
+- end:String            -
+- stdout:String         -
+- stderr:String         -
+- status:String         -
 -------------------------

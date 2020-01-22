@@ -33,8 +33,9 @@ import qualified Data.Text as Text
 
 -- | The database's structure is documented at the repo's root DEV.md file
 class Monad m => LowLevelDbOperations m where
-    startBuild :: String -> m BuildID -- ^ Records start of build with given name, returning the new build's ID.
-    recordStep :: BuildID -> String -> String -> Status -> m () -- ^ Records a step's execution
+    startBuild :: String -> m BuildID -- ^ Records start of build with given name, returns the new build's unique identifier
+    startStep :: BuildID -> String -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
+    endStep :: StepID -> String -> String -> Status -> m () -- ^ Records the end of a step, requires its identifier, stdout, stderr, and its status
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
 newtype UsingIOForDb m a = UsingIOForDb { runUsingIOForDb :: m a }
@@ -70,12 +71,14 @@ withDatabase filepath action =
   createStepsTable :: Query =
     "CREATE TABLE IF NOT EXISTS step\
     \  ( id INTEGER PRIMARY KEY NOT NULL\
-    \  , build_id TEXT NOT NULL\
+    \  , build_id INTEGER NOT NULL\
     \  , description TEXT NOT NULL\
-    \  , stdout TEXT NOT NULL\
-    \  , stderr TEXT NOT NULL\
-    \  , status TEXT NOT NULL\
-    \  , FOREIGN KEY(build_id) REFERENCES build(builder)\
+    \  , start TEXT NOT NULL\
+    \  , end TEXT\
+    \  , stdout TEXT\
+    \  , stderr TEXT\
+    \  , status TEXT\
+    \  , FOREIGN KEY(build_id) REFERENCES build(id)\
     \  )"
 
 withReadConnection
@@ -108,7 +111,22 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
       args =
         [ ":builder" := builderName ]
 
-    recordStep = undefined
+    startStep buildID desc =
+      UsingIOForDb $
+        withWriteConnection $ \conn -> do
+          executeNamed conn (trace (show buildID) query) args
+          fromIntegral <$> lastInsertRowId conn
+     where
+      query :: Query =
+        "INSERT\
+        \  INTO step (build_id, description, start)\
+        \  VALUES (:build_id, :description, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
+      args =
+        [ ":build_id" := buildID
+        , ":description" := desc
+        ]
+
+    endStep = undefined
 
     endBuild buildID status =
       UsingIOForDb $
