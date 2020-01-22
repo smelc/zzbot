@@ -49,9 +49,9 @@ instance MonadIO m => MonadIO (UsingIOForDb m) where
 -- Can be extended with a mutex for concurrent writes.
 newtype Database = Database Connection
 
-withDatabase :: (Database -> IO a) -> IO a
-withDatabase action =
-  withConnection dbFile $ \connexion -> do
+withDatabase :: FilePath -> (Database -> IO a) -> IO a
+withDatabase filepath action =
+  withConnection filepath $ \connexion -> do
     execute_ connexion "PRAGMA journal_mode=WAL;"
     execute_ connexion "PRAGMA foreign_keys=ON;"
     execute_ connexion createBuildTable
