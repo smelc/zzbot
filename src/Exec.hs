@@ -29,6 +29,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
+import Data.Void
 import System.Exit
 import System.IO
 import System.Process
@@ -153,6 +154,7 @@ runStep ctxt (ShellCmd workdir cmd mprop haltOnFailure) = do
   unless (rc == ExitSuccess) $ zzLog Error (show cmd ++ " failed: " ++ show rc)
   when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
   return ctxt'
+runStep _ (Ext ext) = absurd ext
 
 runBuild :: (MonadExec m, DbOperations m, MonadError ExitCode m) => Builder Substituted -> m ()
 runBuild (Builder () name steps) = do
