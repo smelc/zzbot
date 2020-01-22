@@ -26,8 +26,6 @@ library
                      either,
                      extra,
                      filepath,
-                     ilist,
-                     iso8601-time,
                      megaparsec,
                      mtl,
                      prettyprinter,
@@ -36,7 +34,6 @@ library
                      safe,
                      sqlite-simple,
                      text,
-                     time,
                      validation,
                      xml
 

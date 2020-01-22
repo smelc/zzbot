@@ -11,9 +11,6 @@ import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
 import Database.SQLite.Simple
-import Data.List.Index
-import Data.Time.Clock
-import Data.Time.ISO8601
 import Debug.Trace
 
 import Common
@@ -58,28 +55,18 @@ createDatabase = do
   createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY NOT NULL, builder TEXT NOT NULL, start TEXT NOT NULL, end TEXT, status TEXT)"
   createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY NOT NULL, build_id TEXT NOT NULL, description TEXT NOT NULL, stdout TEXT NOT NULL, stderr TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY(build_id) REFERENCES build(builder))"
 
--- | Stores a date in sqlite so that sqlite understands it, using
--- the format described here: https://www.sqlitetutorial.net/sqlite-date/
-getSqliteISO8601Time :: IO String
-getSqliteISO8601Time = do
-  now <- getCurrentTime
-  let iso8601 = take 24 $ formatISO8601Nanos now
-  return $ setAt 10 ' ' iso8601 
-
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
     startBuild builderName = UsingIOForDb $ do
       Database connexion <- ask
       liftIO $ do
-        now <- getSqliteISO8601Time
-        execute connexion "INSERT INTO build (builder, start) VALUES (?, ?)" [builderName, now]
+        execute connexion "INSERT INTO build (builder, start) VALUES (?, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))" $ Only builderName
         fromIntegral <$> lastInsertRowId connexion
     recordStep = undefined
     endBuild buildID status = UsingIOForDb $ do
       Database connexion <- ask
       liftIO $ do
-        now <- trace "about to close" getSqliteISO8601Time
-        let argsList = [":end" := now, ":status" := show status, ":id" := buildID]
+        let argsList = [":status" := show status, ":id" := buildID]
         -- TODO smelc: this makes sqlite crash with "SQLite3 returned ErrorIO while attempting to perform step: disk I/O error"
-        -- executeNamed connexion "UPDATE build SET end = :end, status = :status WHERE id = :id " argsList
+        -- executeNamed connexion "UPDATE build SET end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'), status = :status WHERE id = :id " argsList
         -- close connexion
         return ()
