@@ -20,6 +20,7 @@ module Config (
   , ConfigValidation
   , Command(..)
   , duplicates
+  , ForeachExtension(..)
   , normalize
   , parseVars
   , Phase(..)
@@ -71,40 +72,62 @@ type family StepWorkDirType (p :: Phase) :: Type where
   StepWorkDirType Normalized = String
   StepWorkDirType Substituted = String
 
+type family StepExtensionType (p :: Phase) :: Type where
+  StepExtensionType Parsed = ForeachExtension Parsed
+  StepExtensionType Normalized = Void
+  StepExtensionType Substituted = Void
+
 type Forall (c :: Type -> Constraint) (p :: Phase) =
   ( c (BuilderWorkDirType p)
   , c (ConfigSubstType p)
   , c (StepHaltOnFailureType p)
   , c (StepWorkDirType p)
+  , c (StepExtensionType p)
   )
 
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
   deriving (Eq)
 
+instance Show Command where
+  show (Command cmd []) = cmd
+  show (Command cmd args) = cmd ++ " " ++ unwords args
+
 data Step (p :: Phase)
-    = SetPropertyFromValue { prop :: String, value :: String }
-    | ShellCmd             { workdir :: StepWorkDirType p,
-                             cmd :: Command,
-                             mprop :: Maybe String, -- ^ The build property to set (if any) from the command's output
-                             haltOnFailure :: StepHaltOnFailureType p
-                           }
+  = SetPropertyFromValue { prop :: String, value :: String }
+  | ShellCmd             { workdir :: StepWorkDirType p,
+                           cmd :: Command,
+                           mprop :: Maybe String, -- ^ The build property to set (if any) from the command's output
+                           haltOnFailure :: StepHaltOnFailureType p
+                         }
+  | Ext (StepExtensionType p)
 
 deriving instance Forall Eq p => Eq (Step p)
 deriving instance Forall Show p => Show (Step p)
 
-data Builder (p :: Phase) = Builder { workdir :: BuilderWorkDirType p, name :: String, steps :: [Step p] }
+{- HLINT ignore ForeachExtension -}
+data ForeachExtension (p :: Phase) = Foreach
+  { steps :: [Step p]
+  }
+
+deriving instance Forall Eq p => Eq (ForeachExtension p)
+deriving instance Forall Show p => Show (ForeachExtension p)
+
+data Builder (p :: Phase) = Builder
+  { workdir :: BuilderWorkDirType p
+  , name :: String
+  , steps :: [Step p]
+  }
 
 deriving instance Forall Eq p => Eq (Builder p)
 deriving instance Forall Show p => Show (Builder p)
 
-data Config (p :: Phase) = Config { builders :: NE.NonEmpty (Builder p), subst :: ConfigSubstType p }
+data Config (p :: Phase) = Config
+  { builders :: NE.NonEmpty (Builder p)
+  , subst :: ConfigSubstType p
+  }
 
 deriving instance Forall Eq p => Eq (Config p)
 deriving instance Forall Show p => Show (Config p)
-
-instance Show Command where
-  show (Command cmd []) = cmd
-  show (Command cmd args) = cmd ++ " " ++ unwords args
 
 -- types
 type Subst = [(String,String)]
@@ -190,7 +213,7 @@ instance Substable Command Command where
       <$> applySubstitution delimiters subst cmd
       <*> traverse (applySubstitution delimiters subst) args
 
-instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool) => Substable (Step a) (Step Substituted) where
+instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool, StepExtensionType a ~ Void) => Substable (Step a) (Step Substituted) where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
   substitute delimiters subst (ShellCmd workdir cmd mprop haltOnFailure) =
@@ -199,8 +222,9 @@ instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool) => Substab
       <*> substitute delimiters subst cmd
       <*> Success mprop
       <*> Success haltOnFailure
+  substitute _ _ (Ext ext) = absurd ext
 
-instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool) => Substable (Builder a) (Builder Substituted) where
+instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool, StepExtensionType a ~ Void) => Substable (Builder a) (Builder Substituted) where
   substitute delimiters subst (Builder _ name steps) =
     Builder ()
       <$> applySubstitution delimiters subst name
@@ -250,21 +274,24 @@ normalize userWorkDir Config{builders, subst} =
   normalizeBuilder builder@Builder{workdir=builderWorkDir, name, steps} =
     builder
       { workdir = ()
-      , steps = map (normalizeStep absoluteWorkDir) steps
+      , steps = concatMap (normalizeStep absoluteWorkDir) steps
       }
    where
     relativeWorkDir = fromMaybe "" builderWorkDir
     absoluteWorkDir = prependIfRelative userWorkDir relativeWorkDir
 
-  normalizeStep :: FilePath -> Step Parsed -> Step Normalized
-  normalizeStep _ SetPropertyFromValue{..} = SetPropertyFromValue {..}
+  normalizeStep :: FilePath -> Step Parsed -> [Step Normalized]
+  normalizeStep _ SetPropertyFromValue{..} = [SetPropertyFromValue {..}]
   normalizeStep defaultWorkDir step@ShellCmd{workdir=stepWorkDir, mprop, haltOnFailure} =
-    step
-      { workdir = absoluteWorkDir
-      , haltOnFailure = fromMaybe defaultHaltOnFailure haltOnFailure
-      }
+    [ step
+        { workdir = absoluteWorkDir
+        , haltOnFailure = fromMaybe defaultHaltOnFailure haltOnFailure
+        }
+    ]
    where
     relativeWorkDir = fromMaybe "" stepWorkDir
     absoluteWorkDir = prependIfRelative defaultWorkDir relativeWorkDir
     -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
     defaultHaltOnFailure = isNothing mprop
+  normalizeStep defaultWorkDir (Ext (Foreach steps)) =
+    concatMap (normalizeStep defaultWorkDir) steps

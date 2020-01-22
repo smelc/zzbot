@@ -27,6 +27,7 @@ import Data.List
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
 import Data.Validation
+import Data.Void
 import System.IO
 import Text.Printf
 import Text.Read
@@ -57,6 +58,7 @@ aWorkdir = "workdir"
 tBuilder, tSetProperty, tShell, tConfig :: String
 tBuilder = "builder"
 tEntry = "entry"
+tForeach = "foreach"
 tSetProperty = "setProperty"
 tSetPropertyFromCommand = "setPropertyFromCommand"
 tShell = "shell"
@@ -320,6 +322,7 @@ stepToXml (ShellCmd workdir cmd mprop haltOnFailure) =
  where
   tag | isJust mprop = tSetPropertyFromCommand
       | otherwise = tShell
+stepToXml (Ext ext) = absurd ext
 
 substToXml :: Subst -> Element
 substToXml subst =
