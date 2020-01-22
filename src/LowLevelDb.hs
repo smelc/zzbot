@@ -5,7 +5,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module LowLevelDb where
+module LowLevelDb (
+  Database(),
+  LowLevelDbOperations(..),
+  UsingIOForDb(),
+  runUsingIOForDb,
+  withDatabase
+) where
 
 import Control.Exception
 import Control.Monad.Except
@@ -43,14 +49,14 @@ instance MonadIO m => MonadIO (UsingIOForDb m) where
 -- Can be extended with a mutex for concurrent writes.
 newtype Database = Database Connection
 
-createDatabase :: IO Database
-createDatabase = do
-  connexion <- open dbFile
-  execute_ connexion "PRAGMA journal_mode=WAL;"
-  execute_ connexion "PRAGMA foreign_keys=ON;"
-  execute_ connexion createBuildTable
-  execute_ connexion createStepsTable
-  return (Database connexion)
+withDatabase :: (Database -> IO a) -> IO a
+withDatabase action =
+  withConnection dbFile $ \connexion -> do
+    execute_ connexion "PRAGMA journal_mode=WAL;"
+    execute_ connexion "PRAGMA foreign_keys=ON;"
+    execute_ connexion createBuildTable
+    execute_ connexion createStepsTable
+    action (Database connexion)
  where
   createBuildTable :: Query = "CREATE TABLE IF NOT EXISTS build (id INTEGER PRIMARY KEY NOT NULL, builder TEXT NOT NULL, start TEXT NOT NULL, end TEXT, status TEXT)"
   createStepsTable :: Query = "CREATE TABLE IF NOT EXISTS step (id INTEGER PRIMARY KEY NOT NULL, build_id TEXT NOT NULL, description TEXT NOT NULL, stdout TEXT NOT NULL, stderr TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY(build_id) REFERENCES build(builder))"
@@ -67,5 +73,4 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
       liftIO $ do
         let argsList = [":status" := show status, ":id" := buildID]
         executeNamed connexion "UPDATE build SET end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'), status = :status WHERE id = :id" argsList
-        close connexion
         return ()

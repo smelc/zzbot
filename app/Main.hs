@@ -64,8 +64,8 @@ main = do
   Options{optFilenames, optProcessMode} <- Opt.execParser optionsParserInfo
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
-  database <- createDatabase
-  res <- runConcreteStack database $ traverse (process optProcessMode env) xmls
-  case res of
-    Left code -> exitWith code
-    _ -> return ()
+  withDatabase $ \database -> do
+    res <- runConcreteStack database $ traverse (process optProcessMode env) xmls
+    case res of
+      Left code -> exitWith code
+      _ -> return ()
