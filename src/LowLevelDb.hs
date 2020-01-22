@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
@@ -22,6 +23,7 @@ import Debug.Trace
 import Common
 import Text.Printf
 
+import qualified Control.Concurrent.ReadWriteLock as RWL
 import qualified Data.Text as Text
 
 -- smelc: I have little experience with databases and hence wanna write
@@ -45,9 +47,7 @@ instance MonadError e m => MonadError e (UsingIOForDb m) where
 instance MonadIO m => MonadIO (UsingIOForDb m) where
   liftIO f = UsingIOForDb (liftIO f)
 
--- For now just an alias for a Connection.
--- Can be extended with a mutex for concurrent writes.
-newtype Database = Database Connection
+data Database = Database RWL.RWLock Connection
 
 withDatabase :: FilePath -> (Database -> IO a) -> IO a
 withDatabase filepath action =
@@ -56,7 +56,8 @@ withDatabase filepath action =
     execute_ connexion "PRAGMA foreign_keys=ON;"
     execute_ connexion createBuildTable
     execute_ connexion createStepsTable
-    action (Database connexion)
+    lock <- RWL.new
+    action (Database lock connexion)
  where
   createBuildTable :: Query =
     "CREATE TABLE IF NOT EXISTS build\
@@ -77,29 +78,48 @@ withDatabase filepath action =
     \  , FOREIGN KEY(build_id) REFERENCES build(builder)\
     \  )"
 
+withReadConnection
+  :: (MonadReader Database m, MonadIO m)
+  => (Connection -> IO a)
+  -> m a
+withReadConnection action = do
+  Database lock conn <- ask
+  liftIO (RWL.withRead lock (action conn))
+
+withWriteConnection
+  :: (MonadReader Database m, MonadIO m)
+  => (Connection -> IO a)
+  -> m a
+withWriteConnection action = do
+  Database lock conn <- ask
+  liftIO (RWL.withWrite lock (action conn))
+
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
-    startBuild builderName = UsingIOForDb $ do
-      Database connexion <- ask
-      liftIO $ do
-        executeNamed connexion query args
-        fromIntegral <$> lastInsertRowId connexion
+    startBuild builderName =
+      UsingIOForDb $
+        withWriteConnection $ \conn -> do
+          executeNamed conn query args
+          fromIntegral <$> lastInsertRowId conn
      where
       query =
-        "INSERT INTO build (builder, start)\
-        \VALUES (:builder, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
+        "INSERT\
+        \  INTO build (builder, start)\
+        \  VALUES (:builder, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
       args =
         [ ":builder" := builderName ]
 
     recordStep = undefined
 
-    endBuild buildID status = UsingIOForDb $ do
-      Database connexion <- ask
-      liftIO $ executeNamed connexion query args
+    endBuild buildID status =
+      UsingIOForDb $
+        withWriteConnection $ \conn ->
+          executeNamed conn query args
      where
       query =
         "UPDATE build SET\
         \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
-        \  status = :status WHERE id = :id"
+        \  status = :status \
+        \WHERE id = :id"
       args =
         [ ":status" := show status
         , ":id" := buildID
