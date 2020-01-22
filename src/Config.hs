@@ -9,6 +9,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Config (
   applySubstitution
@@ -68,6 +71,13 @@ type family StepWorkDirType (p :: Phase) :: Type where
   StepWorkDirType Normalized = String
   StepWorkDirType Substituted = String
 
+type Forall (c :: Type -> Constraint) (p :: Phase) =
+  ( c (BuilderWorkDirType p)
+  , c (ConfigSubstType p)
+  , c (StepHaltOnFailureType p)
+  , c (StepWorkDirType p)
+  )
+
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
   deriving (Eq)
 
@@ -79,30 +89,18 @@ data Step (p :: Phase)
                              haltOnFailure :: StepHaltOnFailureType p
                            }
 
-deriving instance Eq (Step Parsed)
-deriving instance Eq (Step Normalized)
-deriving instance Eq (Step Substituted)
-deriving instance Show (Step Parsed)
-deriving instance Show (Step Normalized)
-deriving instance Show (Step Substituted)
+deriving instance Forall Eq p => Eq (Step p)
+deriving instance Forall Show p => Show (Step p)
 
 data Builder (p :: Phase) = Builder { workdir :: BuilderWorkDirType p, name :: String, steps :: [Step p] }
 
-deriving instance Eq (Builder Parsed)
-deriving instance Eq (Builder Normalized)
-deriving instance Eq (Builder Substituted)
-deriving instance Show (Builder Parsed)
-deriving instance Show (Builder Normalized)
-deriving instance Show (Builder Substituted)
+deriving instance Forall Eq p => Eq (Builder p)
+deriving instance Forall Show p => Show (Builder p)
 
 data Config (p :: Phase) = Config { builders :: NE.NonEmpty (Builder p), subst :: ConfigSubstType p }
 
-deriving instance Eq (Config Parsed)
-deriving instance Eq (Config Normalized)
-deriving instance Eq (Config Substituted)
-deriving instance Show (Config Parsed)
-deriving instance Show (Config Normalized)
-deriving instance Show (Config Substituted)
+deriving instance Forall Eq p => Eq (Config p)
+deriving instance Forall Show p => Show (Config p)
 
 instance Show Command where
   show (Command cmd []) = cmd
