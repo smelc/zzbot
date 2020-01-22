@@ -66,7 +66,6 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
       Database connexion <- ask
       liftIO $ do
         let argsList = [":status" := show status, ":id" := buildID]
-        -- TODO smelc: this makes sqlite crash with "SQLite3 returned ErrorIO while attempting to perform step: disk I/O error"
-        -- executeNamed connexion "UPDATE build SET end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'), status = :status WHERE id = :id " argsList
-        -- close connexion
+        executeNamed connexion "UPDATE build SET end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'), status = :status WHERE id = :id" argsList
+        close connexion
         return ()
