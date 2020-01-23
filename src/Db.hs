@@ -11,6 +11,7 @@ import Data.List.Extra
 import Common
 import LowLevelDb
 
+-- | The state of a build, as exposed to clients of this file
 data BuildState = BuildState BuildID [Status]
 
 snoc :: BuildState -> Status -> BuildState
@@ -20,7 +21,7 @@ snoc (BuildState buildID statuses) status =
 class Monad m => DbOperations m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
    startStep :: BuildState -> String -> m StepID -- ^ The string is the step's description
-   endStep :: BuildState -> StepID -> String -> String -> Status -> m BuildState -- ^ stdout, stderr, step status
+   endStep :: BuildState -> StepID -> StepStreams -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
 newtype UsingLowLevelDb m a = UsingLowLevelDb { runUsingLowLevelDb :: m a }
@@ -36,7 +37,7 @@ instance MonadError e m => MonadError e (UsingLowLevelDb m) where
 instance DbOperations m => DbOperations (ExceptT a m) where
    startBuild name = lift (Db.startBuild name)
    startStep state desc = lift (Db.startStep state desc)
-   endStep state stepID stdout stderr status = lift (Db.endStep state stepID stdout stderr status)
+   endStep state stepID streams status = lift (Db.endStep state stepID streams status)
    endBuild state = lift (Db.endBuild state)
 
 instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
@@ -45,8 +46,8 @@ instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
        return $ BuildState buildID []
     startStep buildState@(BuildState buildID _) desc = UsingLowLevelDb $
        LowLevelDb.startStep buildID desc
-    endStep buildState@(BuildState buildID steps) stepID stdout stderr status = UsingLowLevelDb $ do
-       LowLevelDb.endStep stepID stdout stderr status
+    endStep buildState stepID streams status = UsingLowLevelDb $ do
+       LowLevelDb.endStep stepID streams status
        return $ Db.snoc buildState status
     endBuild buildState@(BuildState buildID statuses) = UsingLowLevelDb $ do
        let status = foldr max Success statuses

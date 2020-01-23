@@ -34,6 +34,7 @@ import System.Exit
 import System.IO
 import System.Process
 
+import Common (StepStreams(StepStreams), toExitCode)
 import Config
 import Db
 import Xml
@@ -76,7 +77,7 @@ newtype UsingIOForExec m a = UsingIOForExec { runUsingIOForExec :: m a }
 instance DbOperations m => DbOperations (UsingIOForExec m) where
    startBuild name = UsingIOForExec (Db.startBuild name)
    startStep state desc = UsingIOForExec (Db.startStep state desc)
-   endStep state stepID stdout stderr status = UsingIOForExec (Db.endStep state stepID stdout stderr status)
+   endStep state stepID streams status = UsingIOForExec (Db.endStep state stepID streams status)
    endBuild state = UsingIOForExec (Db.endBuild state)
 
 instance MonadError e m => MonadError e (UsingIOForExec m) where
@@ -135,22 +136,25 @@ runSteps
   :: (MonadExec m, DbOperations m, MonadError ExitCode m)
   => BuildContext
   -> [Step Substituted]
-  -> m ()
-runSteps _ [] = return ()
+  -> m BuildContext
+runSteps ctxt [] = return ctxt
 runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
   step' <- inject
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList properties) step)
-  startStep buildState $ show step'
-  ctxt' <- runStep ctxt step'
+  stepID <- startStep buildState $ show step'
+  (ctxt', streams, status, continue) <- runStep ctxt step'
+  endStep (snoc buildState status) stepID streams status
+  unless continue $ throwError subprocessErrorCode
   runSteps ctxt' steps
 
-runStep :: (MonadExec m, MonadError ExitCode m)
+runStep :: MonadExec m
         => BuildContext
         -> Step Substituted -- ^ The step to execute
-        -> m BuildContext
+        -> m (BuildContext, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
 runStep ctxt@BuildContext{properties} (SetPropertyFromValue prop value) =
-  return $ withProperties ctxt $ Map.insert prop value properties
+  return (ctxt', StepStreams Nothing Nothing, Common.Success, True)
+  where ctxt' = withProperties ctxt $ Map.insert prop value properties
 runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure) = do
   let infoSuffix :: String = case mprop of Nothing -> ""
                                            Just prop -> " → " ++ prop
@@ -160,16 +164,22 @@ runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure)
   unless (null errmsg) $ putErr errmsg -- show step error output, if any
   let ctxt' = case mprop of Nothing -> ctxt
                             Just prop -> withProperties ctxt $ Map.insert prop outmsg properties
+      streams = StepStreams (Just outmsg) (Just errmsg)
+      status = toExitCode rc
   unless (rc == ExitSuccess) $ zzLog Error (show cmd ++ " failed: " ++ show rc)
-  when (haltOnFailure && rc /= ExitSuccess ) $ throwError subprocessErrorCode
-  return ctxt'
+  return (ctxt', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
+  where haltBuilds Common.Success = False
+        haltBuilds Common.Warning = False
+        haltBuilds Common.Cancellation = True
+        haltBuilds Common.Failure = True
+        haltBuilds Common.Error = True
 runStep _ (Ext ext) = absurd ext
 
 runBuild :: (MonadExec m, DbOperations m, MonadError ExitCode m) => Builder Substituted -> m ()
 runBuild (Builder () name steps) = do
-  buildState <- startBuild name -- FIXME smelc update state in runSteps
-  runSteps (BuildContext buildState Map.empty) steps
-  endBuild buildState
+  initialState <- startBuild name
+  finalCtxt <- runSteps (BuildContext initialState Map.empty) steps
+  endBuild (buildState finalCtxt)
   return ()
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory

@@ -18,7 +18,7 @@ import Control.Exception
 import Control.Monad.Except
 import Control.Monad.Reader
 import Database.SQLite.Simple
-import Debug.Trace
+import Data.Maybe
 
 import Common
 import Text.Printf
@@ -35,7 +35,7 @@ import qualified Data.Text as Text
 class Monad m => LowLevelDbOperations m where
     startBuild :: String -> m BuildID -- ^ Records start of build with given name, returns the new build's unique identifier
     startStep :: BuildID -> String -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
-    endStep :: StepID -> String -> String -> Status -> m () -- ^ Records the end of a step, requires its identifier, stdout, stderr, and its status
+    endStep :: StepID -> StepStreams -> Status -> m () -- ^ Records the end of a step, requires its identifier, streams outputs, and its status
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
 newtype UsingIOForDb m a = UsingIOForDb { runUsingIOForDb :: m a }
@@ -114,7 +114,7 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
     startStep buildID desc =
       UsingIOForDb $
         withWriteConnection $ \conn -> do
-          executeNamed conn (trace (show buildID) query) args
+          executeNamed conn query args
           fromIntegral <$> lastInsertRowId conn
      where
       query :: Query =
@@ -126,7 +126,25 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
         , ":description" := desc
         ]
 
-    endStep = undefined
+    endStep stepID streams status =
+      UsingIOForDb $
+        withWriteConnection $ \conn ->
+          executeNamed conn query args
+     where
+      query :: Query =
+        "UPDATE step SET\
+        \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
+        \  stdout = :stdout, \
+        \  stderr = :stderr, \
+        \  status = :status \
+        \WHERE id = :id"
+      args =
+        [ ":stdout" := streamToValue (stdout streams)
+        , ":stderr" := streamToValue (stderr streams)
+        , ":status" := show status
+        , ":id" := stepID
+        ]
+      streamToValue = fromMaybe "NULL"
 
     endBuild buildID status =
       UsingIOForDb $

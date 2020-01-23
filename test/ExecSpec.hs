@@ -42,7 +42,7 @@ instance MonadExec LoggingMockExec where
 instance DbOperations LoggingMockExec where
    startBuild name = return (BuildState 0 [])
    startStep state desc = return 0 -- FIXME smelc
-   endStep state stepID stdout stderr status = return state -- FIXME smelc
+   endStep state stepID streams status = return state -- FIXME smelc
    endBuild state = return Success
 
 -- Tracing mock exec
@@ -67,7 +67,7 @@ instance MonadExec TracingMockExec where
 instance DbOperations TracingMockExec where
    startBuild name = return (BuildState 0 [])
    startStep state desc = return 0 -- FIXME smelc
-   endStep state stepID stdout stderr status = return state -- FIXME smelc
+   endStep state stepID streams status = return state -- FIXME smelc
    endBuild state = return Success
 
 -- Tests
