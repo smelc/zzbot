@@ -1,8 +1,11 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Db where
 
@@ -23,38 +26,31 @@ snoc :: BuildState -> Status -> BuildState
 snoc (BuildState buildID statuses) status =
    BuildState buildID $ Data.List.Extra.snoc statuses status
 
-class Monad m => DbOperations m where
+class Monad m => DbOperations s m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
    startStep :: BuildState -> Step Substituted -> m StepID -- ^ The string is the step's description
    endStep :: BuildState -> StepID -> StepStreams -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
-newtype UsingLowLevelDb m a = UsingLowLevelDb { runUsingLowLevelDb :: m a }
- deriving (Functor, Applicative, Monad)
+instance forall a s m . DbOperations s m => DbOperations s (ExceptT a m) where
+   startBuild name = lift (Db.startBuild @s name)
+   startStep state desc = lift (Db.startStep @s state desc)
+   endStep state stepID streams status =
+     lift (Db.endStep @s state stepID streams status)
+   endBuild state = lift (Db.endBuild @s state)
 
-instance MonadIO m => MonadIO (UsingLowLevelDb m) where
-  liftIO f = UsingLowLevelDb (liftIO f)
+data UsingLowLevelDb s
 
-instance MonadError e m => MonadError e (UsingLowLevelDb m) where
-  throwError e = UsingLowLevelDb (throwError e)
-  catchError m h = UsingLowLevelDb $ catchError (runUsingLowLevelDb m) (runUsingLowLevelDb . h)
-
-instance DbOperations m => DbOperations (ExceptT a m) where
-   startBuild name = lift (Db.startBuild name)
-   startStep state desc = lift (Db.startStep state desc)
-   endStep state stepID streams status = lift (Db.endStep state stepID streams status)
-   endBuild state = lift (Db.endBuild state)
-
-instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
-    startBuild builderName = UsingLowLevelDb $ do
-       buildID <- LowLevelDb.startBuild builderName
+instance (Monad m, LowLevelDbOperations s m) => DbOperations (UsingLowLevelDb s) m where
+    startBuild builderName = do
+       buildID <- LowLevelDb.startBuild @s builderName
        return $ BuildState buildID []
-    startStep buildState@(BuildState buildID _) step = UsingLowLevelDb $
-       LowLevelDb.startStep buildID (J.encode step)
-    endStep buildState stepID streams status = UsingLowLevelDb $ do
-       LowLevelDb.endStep stepID streams status
+    startStep buildState@(BuildState buildID _) step =
+       LowLevelDb.startStep @s buildID (J.encode step)
+    endStep buildState stepID streams status = do
+       LowLevelDb.endStep @s stepID streams status
        return $ Db.snoc buildState status
-    endBuild buildState@(BuildState buildID statuses) = UsingLowLevelDb $ do
+    endBuild buildState@(BuildState buildID statuses) = do
        let status = foldr max Success statuses
-       LowLevelDb.endBuild buildID status
+       LowLevelDb.endBuild @s buildID status
        return status
