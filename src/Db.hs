@@ -12,6 +12,8 @@ import Common
 import LowLevelDb
 
 -- | The state of a build, as exposed to clients of this file
+-- TODO smelc keep only the maximum of statuses gathered so far, no need to keep the list
+-- This'll get rid of the snoc business whose complexity is bad
 data BuildState = BuildState BuildID [Status]
 
 snoc :: BuildState -> Status -> BuildState
