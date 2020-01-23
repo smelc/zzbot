@@ -23,6 +23,7 @@ import Data.Maybe
 import Common
 import Text.Printf
 
+import qualified Data.ByteString.Lazy as LBS
 import qualified Control.Concurrent.ReadWriteLock as RWL
 import qualified Data.Text as Text
 
@@ -34,7 +35,7 @@ import qualified Data.Text as Text
 -- | The database's structure is documented at the repo's root DEV.md file
 class Monad m => LowLevelDbOperations m where
     startBuild :: String -> m BuildID -- ^ Records start of build with given name, returns the new build's unique identifier
-    startStep :: BuildID -> String -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
+    startStep :: BuildID -> LBS.ByteString -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
     endStep :: StepID -> StepStreams -> Status -> m () -- ^ Records the end of a step, requires its identifier, streams outputs, and its status
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 

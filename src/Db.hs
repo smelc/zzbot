@@ -8,6 +8,7 @@ module Db where
 
 import Control.Monad.Except
 import Data.List.Extra
+import qualified Data.Aeson as J
 
 import Common
 import Config
@@ -49,7 +50,7 @@ instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
        buildID <- LowLevelDb.startBuild builderName
        return $ BuildState buildID []
     startStep buildState@(BuildState buildID _) step = UsingLowLevelDb $
-       LowLevelDb.startStep buildID (show step)
+       LowLevelDb.startStep buildID (J.encode step)
     endStep buildState stepID streams status = UsingLowLevelDb $ do
        LowLevelDb.endStep stepID streams status
        return $ Db.snoc buildState status

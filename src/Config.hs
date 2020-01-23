@@ -12,6 +12,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Config (
   applySubstitution
@@ -38,12 +39,14 @@ import Data.Kind
 import Data.Maybe
 import Data.Validation
 import Data.Void
+import GHC.Generics
 import Safe
 import System.FilePath
 import Text.Megaparsec.Char
 import Text.Megaparsec
 import Text.Printf
 
+import qualified Data.Aeson as J
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -86,7 +89,10 @@ type Forall (c :: Type -> Constraint) (p :: Phase) =
   )
 
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance J.ToJSON Command
+instance J.FromJSON Command
 
 data Step (p :: Phase)
   = SetPropertyFromValue { prop :: String, value :: String }
@@ -99,6 +105,9 @@ data Step (p :: Phase)
 
 deriving instance Forall Eq p => Eq (Step p)
 deriving instance Forall Show p => Show (Step p)
+deriving instance Forall Generic p => Generic (Step p)
+instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (Step p)
+instance (Forall J.FromJSON p, Forall Generic p) => J.FromJSON (Step p)
 
 {- HLINT ignore ForeachExtension -}
 data ForeachExtension (p :: Phase) = Foreach
@@ -107,6 +116,9 @@ data ForeachExtension (p :: Phase) = Foreach
 
 deriving instance Forall Eq p => Eq (ForeachExtension p)
 deriving instance Forall Show p => Show (ForeachExtension p)
+deriving instance Forall Generic p => Generic (ForeachExtension p)
+instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (ForeachExtension p)
+instance (Forall J.FromJSON p, Forall Generic p) => J.FromJSON (ForeachExtension p)
 
 data Builder (p :: Phase) = Builder
   { workdir :: BuilderWorkDirType p
@@ -116,6 +128,9 @@ data Builder (p :: Phase) = Builder
 
 deriving instance Forall Eq p => Eq (Builder p)
 deriving instance Forall Show p => Show (Builder p)
+deriving instance Forall Generic p => Generic (Builder p)
+instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (Builder p)
+instance (Forall J.FromJSON p, Forall Generic p) => J.FromJSON (Builder p)
 
 data Config (p :: Phase) = Config
   { builders :: NE.NonEmpty (Builder p)
@@ -124,6 +139,9 @@ data Config (p :: Phase) = Config
 
 deriving instance Forall Eq p => Eq (Config p)
 deriving instance Forall Show p => Show (Config p)
+deriving instance Forall Generic p => Generic (Config p)
+instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (Config p)
+instance (Forall J.FromJSON p, Forall Generic p) => J.FromJSON (Config p)
 
 -- types
 type Subst = [(String,String)]
