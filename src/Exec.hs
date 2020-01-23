@@ -7,6 +7,9 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- File to execute a build specified as a Builder
 module Exec
@@ -62,7 +65,7 @@ withProperties BuildContext{buildState} = BuildContext buildState
 data LogLevel = Info | Error
   deriving (Eq, Show)
 
-class Monad m => MonadExec m where
+class Monad m => MonadExec s m where
   zzLog :: LogLevel -> String -> m ()
   runShellCommand
     :: String                       -- ^ The working directory
@@ -71,21 +74,10 @@ class Monad m => MonadExec m where
   putOut   :: String -> m ()
   putErr   :: String -> m ()
 
-newtype UsingIOForExec m a = UsingIOForExec { runUsingIOForExec :: m a }
- deriving (Functor, Applicative, Monad)
+data UsingIOForExec
 
-instance DbOperations m => DbOperations (UsingIOForExec m) where
-   startBuild name = UsingIOForExec (Db.startBuild name)
-   startStep state desc = UsingIOForExec (Db.startStep state desc)
-   endStep state stepID streams status = UsingIOForExec (Db.endStep state stepID streams status)
-   endBuild state = UsingIOForExec (Db.endBuild state)
-
-instance MonadError e m => MonadError e (UsingIOForExec m) where
-  throwError e = UsingIOForExec (throwError e)
-  catchError m h = UsingIOForExec $ catchError (runUsingIOForExec m) (runUsingIOForExec . h)
-
-instance (Monad m, MonadIO m) => MonadExec (UsingIOForExec m) where
-  zzLog logLevel logEntry = UsingIOForExec $ liftIO $ hPutDoc handle (annotate style doc)
+instance (Monad m, MonadIO m) => MonadExec UsingIOForExec m where
+  zzLog logLevel logEntry = liftIO $ hPutDoc handle (annotate style doc)
    where
     doc = "ZZ>" <+> pretty logEntry <> hardline
     handle
@@ -96,27 +88,28 @@ instance (Monad m, MonadIO m) => MonadExec (UsingIOForExec m) where
       | Error <- logLevel = color Red
 
   runShellCommand workdir Command{cmdFilename, cmdArgs} =
-    UsingIOForExec $ liftIO $ readCreateProcessWithExitCode createProcess ""
+    liftIO $ readCreateProcessWithExitCode createProcess ""
    where
     createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
 
-  putOut = UsingIOForExec . liftIO . putStr
-  putErr = UsingIOForExec . liftIO . hPutStr stderr
+  putOut = liftIO . putStr
+  putErr = liftIO . hPutStr stderr
 
-instance MonadExec m => MonadExec (ExceptT e m) where
-  zzLog textColor logEntry = lift (zzLog textColor logEntry)
-  runShellCommand workdir command = lift (runShellCommand workdir command)
-  putOut   str = lift (putOut str)
-  putErr   str = lift (putErr str)
+instance forall e s m . MonadExec s m => MonadExec s (ExceptT e m) where
+  zzLog textColor logEntry = lift (zzLog @s textColor logEntry)
+  runShellCommand workdir command = lift (runShellCommand @s workdir command)
+  putOut   str = lift (putOut @s str)
+  putErr   str = lift (putErr @s str)
 
-putOutLn :: MonadExec m => String -> m ()
-putOutLn s = putOut (s ++ "\n")
+putOutLn :: forall s m . MonadExec s m => String -> m ()
+putOutLn str = putOut @s (str ++ "\n")
 
-putErrLn :: MonadExec m => String -> m ()
-putErrLn s = putErr (s ++ "\n")
+putErrLn :: forall s m . MonadExec s m => String -> m ()
+putErrLn str = putErr @s (str ++ "\n")
 
 inject
-  :: (Show e, MonadExec m, MonadError ExitCode m)
+  :: forall s m e a
+   . (Show e, MonadExec s m, MonadError ExitCode m)
   => ExitCode
   -> Validation (Set.Set e) a
   -> m a
@@ -124,54 +117,57 @@ inject code validation =
   case validation of
     Success res -> return res
     Failure errors -> do
-      zzLog Error (buildErrorMsg errors)
+      zzLog @s Error (buildErrorMsg errors)
       throwError code
  where
-  buildErrorMsg :: Show a => Set.Set a -> String
+  buildErrorMsg :: forall e . Show e => Set.Set e -> String
   buildErrorMsg errors = unlines $ map show $ Set.toList errors
 
 dynSubstDelimiters = ("«", "»")
 
 runSteps
-  :: (MonadExec m, DbOperations m, MonadError ExitCode m)
+  :: forall s1 s2 m
+   . (MonadExec s1 m, DbOperations s2 m, MonadError ExitCode m)
   => BuildContext
   -> [Step Substituted]
   -> m BuildContext
 runSteps ctxt [] = return ctxt
 runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
-  step' <- inject
+  step' <- inject @s1
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList properties) step)
-  stepID <- startStep buildState step'
-  (ctxt', streams, status, continue) <- runStep ctxt step'
-  endStep (snoc buildState status) stepID streams status
+  stepID <- startStep @s2 buildState step'
+  (ctxt', streams, status, continue) <- runStep @s1 ctxt step'
+  endStep @s2 (snoc buildState status) stepID streams status
   unless continue $ throwError subprocessErrorCode
-  runSteps ctxt' steps
+  runSteps @s1 @s2 ctxt' steps
 
 prettyCommand :: Command -> String
 prettyCommand (Command cmd []) = cmd
 prettyCommand (Command cmd args) = cmd ++ " " ++ unwords args
 
-runStep :: MonadExec m
-        => BuildContext
-        -> Step Substituted -- ^ The step to execute
-        -> m (BuildContext, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
+runStep
+  :: forall s m
+   . MonadExec s m
+  => BuildContext
+  -> Step Substituted -- ^ The step to execute
+  -> m (BuildContext, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
 runStep ctxt@BuildContext{properties} (SetPropertyFromValue prop value) =
   return (ctxt', StepStreams Nothing Nothing, Common.Success, True)
   where ctxt' = withProperties ctxt $ Map.insert prop value properties
 runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure) = do
   let infoSuffix :: String = case mprop of Nothing -> ""
                                            Just prop -> " → " ++ prop
-  zzLog Info (prettyCommand cmd ++ infoSuffix)
-  (rc, outmsg, errmsg) <- runShellCommand workdir cmd
-  unless (null outmsg) $ putOut outmsg -- show step normal output, if any
-  unless (null errmsg) $ putErr errmsg -- show step error output, if any
+  zzLog @s Info (prettyCommand cmd ++ infoSuffix)
+  (rc, outmsg, errmsg) <- runShellCommand @s workdir cmd
+  unless (null outmsg) $ putOut @s outmsg -- show step normal output, if any
+  unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
   let ctxt' = case mprop of Nothing -> ctxt
                             Just prop -> withProperties ctxt $ Map.insert prop outmsg properties
       streams = StepStreams (Just outmsg) (Just errmsg)
       status = toExitCode rc
   unless (rc == ExitSuccess) $
-    zzLog Error (prettyCommand cmd ++ " failed: " ++ show rc)
+    zzLog @s Error (prettyCommand cmd ++ " failed: " ++ show rc)
   return (ctxt', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
   where haltBuilds Common.Success = False
         haltBuilds Common.Warning = False
@@ -180,11 +176,15 @@ runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure)
         haltBuilds Common.Error = True
 runStep _ (Ext ext) = absurd ext
 
-runBuild :: (MonadExec m, DbOperations m, MonadError ExitCode m) => Builder Substituted -> m ()
+runBuild
+  :: forall s1 s2 m
+   . (MonadExec s1 m, DbOperations s2 m, MonadError ExitCode m)
+  => Builder Substituted
+  -> m ()
 runBuild (Builder () name steps) = do
-  initialState <- startBuild name
-  finalCtxt <- runSteps (BuildContext initialState Map.empty) steps
-  endBuild (buildState finalCtxt)
+  initialState <- startBuild @s2 name
+  finalCtxt <- runSteps @s1 @s2 (BuildContext initialState Map.empty) steps
+  endBuild @s2 (buildState finalCtxt)
   return ()
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
@@ -194,16 +194,17 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 data ProcessMode = PrintOnly | Execute
 
 process
-  :: (MonadExec m, DbOperations m, MonadError ExitCode m)
+  :: forall s1 s2 m
+   . (MonadExec s1 m, DbOperations s2 m, MonadError ExitCode m)
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> m ()
 process mode ProcessEnv{Exec.workdir, sysenv} xml = do
-  parsedConfig <- inject parsingErrorCode (parseXmlString xml)
+  parsedConfig <- inject @s1 parsingErrorCode (parseXmlString xml)
   let normalizedConfig = normalize workdir parsedConfig
   substitutedConfig@Config{builders} <-
-    inject substitutionErrorCode (substAll sysenv normalizedConfig)
+    inject @s1 substitutionErrorCode (substAll sysenv normalizedConfig)
   case mode of
-    PrintOnly -> putOutLn (renderAsXml substitutedConfig)
-    Execute -> traverse_ runBuild builders
+    PrintOnly -> putOutLn @s1 (renderAsXml substitutedConfig)
+    Execute -> traverse_ (runBuild @s1 @s2) builders

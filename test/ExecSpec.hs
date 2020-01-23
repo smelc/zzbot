@@ -1,4 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeApplications #-}
 
 module ExecSpec (spec) where
 
@@ -33,13 +35,13 @@ newtype LoggingMockExec a = LoggingMockExec (Writer [LogEntry] a)
 runLoggingMockExec :: LoggingMockExec a -> (a, [LogEntry])
 runLoggingMockExec (LoggingMockExec m) = runWriter m
 
-instance MonadExec LoggingMockExec where
+instance MonadExec () LoggingMockExec where
   zzLog level entry = tell [Message level entry]
   runShellCommand _ cmd = return (mockShellCommand cmd)
   putOut   str = tell [StdOut str]
   putErr   str = tell [StdErr str]
 
-instance DbOperations LoggingMockExec where
+instance DbOperations () LoggingMockExec where
    startBuild name = return (BuildState 0 [])
    startStep state desc = return 0 -- FIXME smelc
    endStep state stepID streams status = return state -- FIXME smelc
@@ -50,13 +52,15 @@ instance DbOperations LoggingMockExec where
 data Execution = Execution String Command
   deriving (Eq, Show)
 
+data UsingTracingMockExec
+
 newtype TracingMockExec a = TracingMockExec (Writer [Execution] a)
   deriving (Functor, Applicative, Monad, MonadWriter [Execution])
 
 runTracingMockExec :: TracingMockExec a -> (a, [Execution])
 runTracingMockExec (TracingMockExec m) = runWriter m
 
-instance MonadExec TracingMockExec where
+instance MonadExec () TracingMockExec where
   zzLog color entry = return ()
   runShellCommand workdir command = do
     tell [Execution workdir command]
@@ -64,7 +68,7 @@ instance MonadExec TracingMockExec where
   putOut   str = return ()
   putErr   str = return ()
 
-instance DbOperations TracingMockExec where
+instance DbOperations () TracingMockExec where
    startBuild name = return (BuildState 0 [])
    startStep state desc = return 0 -- FIXME smelc
    endStep state stepID streams status = return state -- FIXME smelc
@@ -75,9 +79,11 @@ instance DbOperations TracingMockExec where
 spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
-      runLoggingMockExec (runExceptT (process Execute env testXml)) `shouldBe` expectedOutput
+      runLoggingMockExec (runExceptT (process @() @() Execute env testXml))
+        `shouldBe` expectedOutput
     it "should set the working directory as specified" $
-      runTracingMockExec (runExceptT (process Execute env testXml)) `shouldBe` expectedTrace
+      runTracingMockExec (runExceptT (process @() @() Execute env testXml))
+        `shouldBe` expectedTrace
   where
     env = ProcessEnv "/test/workdir" [("ENV_VAR", "a")]
     testXml =

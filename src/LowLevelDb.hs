@@ -1,16 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE RankNTypes #-}
 
 module LowLevelDb (
   Database(),
   LowLevelDbOperations(..),
   UsingIOForDb(),
-  runUsingIOForDb,
   withDatabase
 ) where
 
@@ -33,21 +33,13 @@ import qualified Data.Text as Text
 -- for the moment
 
 -- | The database's structure is documented at the repo's root DEV.md file
-class Monad m => LowLevelDbOperations m where
+class Monad m => LowLevelDbOperations s m where
     startBuild :: String -> m BuildID -- ^ Records start of build with given name, returns the new build's unique identifier
     startStep :: BuildID -> LBS.ByteString -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
     endStep :: StepID -> StepStreams -> Status -> m () -- ^ Records the end of a step, requires its identifier, streams outputs, and its status
     endBuild :: BuildID -> Status -> m () -- ^ End a build: records the end time and the status
 
-newtype UsingIOForDb m a = UsingIOForDb { runUsingIOForDb :: m a }
- deriving (Functor, Applicative, Monad)
-
-instance MonadError e m => MonadError e (UsingIOForDb m) where
-  throwError e = UsingIOForDb (throwError e)
-  catchError m h = UsingIOForDb $ catchError (runUsingIOForDb m) (runUsingIOForDb . h)
-
-instance MonadIO m => MonadIO (UsingIOForDb m) where
-  liftIO f = UsingIOForDb (liftIO f)
+data UsingIOForDb
 
 data Database = Database RWL.RWLock Connection
 
@@ -98,12 +90,11 @@ withWriteConnection action = do
   Database lock conn <- ask
   liftIO (RWL.withWrite lock (action conn))
 
-instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOForDb m) where
+instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations UsingIOForDb m where
     startBuild builderName =
-      UsingIOForDb $
-        withWriteConnection $ \conn -> do
-          executeNamed conn query args
-          fromIntegral <$> lastInsertRowId conn
+      withWriteConnection $ \conn -> do
+        executeNamed conn query args
+        fromIntegral <$> lastInsertRowId conn
      where
       query =
         "INSERT\
@@ -113,10 +104,9 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
         [ ":builder" := builderName ]
 
     startStep buildID desc =
-      UsingIOForDb $
-        withWriteConnection $ \conn -> do
-          executeNamed conn query args
-          fromIntegral <$> lastInsertRowId conn
+      withWriteConnection $ \conn -> do
+        executeNamed conn query args
+        fromIntegral <$> lastInsertRowId conn
      where
       query :: Query =
         "INSERT\
@@ -128,9 +118,8 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
         ]
 
     endStep stepID streams status =
-      UsingIOForDb $
-        withWriteConnection $ \conn ->
-          executeNamed conn query args
+      withWriteConnection $ \conn ->
+        executeNamed conn query args
      where
       query :: Query =
         "UPDATE step SET\
@@ -148,9 +137,8 @@ instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations (UsingIOFor
       streamToValue = fromMaybe "NULL"
 
     endBuild buildID status =
-      UsingIOForDb $
-        withWriteConnection $ \conn ->
-          executeNamed conn query args
+      withWriteConnection $ \conn ->
+        executeNamed conn query args
      where
       query =
         "UPDATE build SET\

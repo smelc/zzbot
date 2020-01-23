@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
@@ -53,18 +54,9 @@ optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
 runConcreteStack
   :: Database
-  -> UsingIOForExec
-       ( UsingLowLevelDb
-           (UsingIOForDb (ReaderT Database (ExceptT ExitCode IO)))
-       )
-       a
+  -> ReaderT Database (ExceptT ExitCode IO) a
   -> IO (Either ExitCode a)
-runConcreteStack db =
-  runExceptT
-    . flip runReaderT db
-    . runUsingIOForDb
-    . runUsingLowLevelDb
-    . runUsingIOForExec
+runConcreteStack db = runExceptT . flip runReaderT db
 
 main :: IO ()
 main = do
@@ -73,7 +65,8 @@ main = do
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
   withDatabase optDatabasePath $ \db -> do
-    res <- runConcreteStack db $ traverse (process optProcessMode env) xmls
+    res <- runConcreteStack db $ traverse
+      (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) optProcessMode env) xmls
     case res of
       Left code -> exitWith code
       _ -> return ()
