@@ -2,13 +2,16 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DataKinds #-}
 
 module Db where
 
 import Control.Monad.Except
 import Data.List.Extra
+import qualified Data.Aeson as J
 
 import Common
+import Config
 import LowLevelDb
 
 -- | The state of a build, as exposed to clients of this file
@@ -22,7 +25,7 @@ snoc (BuildState buildID statuses) status =
 
 class Monad m => DbOperations m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
-   startStep :: BuildState -> String -> m StepID -- ^ The string is the step's description
+   startStep :: BuildState -> Step Substituted -> m StepID -- ^ The string is the step's description
    endStep :: BuildState -> StepID -> StepStreams -> Status -> m BuildState -- ^ stdout, stderr, step status
    endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
 
@@ -46,8 +49,8 @@ instance LowLevelDbOperations m => DbOperations (UsingLowLevelDb m) where
     startBuild builderName = UsingLowLevelDb $ do
        buildID <- LowLevelDb.startBuild builderName
        return $ BuildState buildID []
-    startStep buildState@(BuildState buildID _) desc = UsingLowLevelDb $
-       LowLevelDb.startStep buildID desc
+    startStep buildState@(BuildState buildID _) step = UsingLowLevelDb $
+       LowLevelDb.startStep buildID (J.encode step)
     endStep buildState stepID streams status = UsingLowLevelDb $ do
        LowLevelDb.endStep stepID streams status
        return $ Db.snoc buildState status

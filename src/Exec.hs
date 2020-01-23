@@ -142,7 +142,7 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
   step' <- inject
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList properties) step)
-  stepID <- startStep buildState $ show step'
+  stepID <- startStep buildState step'
   (ctxt', streams, status, continue) <- runStep ctxt step'
   endStep (snoc buildState status) stepID streams status
   unless continue $ throwError subprocessErrorCode
