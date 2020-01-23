@@ -86,11 +86,7 @@ type Forall (c :: Type -> Constraint) (p :: Phase) =
   )
 
 data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
-  deriving (Eq)
-
-instance Show Command where
-  show (Command cmd []) = cmd
-  show (Command cmd args) = cmd ++ " " ++ unwords args
+  deriving (Eq, Show)
 
 data Step (p :: Phase)
   = SetPropertyFromValue { prop :: String, value :: String }

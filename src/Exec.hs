@@ -148,6 +148,10 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
   unless continue $ throwError subprocessErrorCode
   runSteps ctxt' steps
 
+prettyCommand :: Command -> String
+prettyCommand (Command cmd []) = cmd
+prettyCommand (Command cmd args) = cmd ++ " " ++ unwords args
+
 runStep :: MonadExec m
         => BuildContext
         -> Step Substituted -- ^ The step to execute
@@ -158,7 +162,7 @@ runStep ctxt@BuildContext{properties} (SetPropertyFromValue prop value) =
 runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure) = do
   let infoSuffix :: String = case mprop of Nothing -> ""
                                            Just prop -> " → " ++ prop
-  zzLog Info (show cmd ++ infoSuffix)
+  zzLog Info (prettyCommand cmd ++ infoSuffix)
   (rc, outmsg, errmsg) <- runShellCommand workdir cmd
   unless (null outmsg) $ putOut outmsg -- show step normal output, if any
   unless (null errmsg) $ putErr errmsg -- show step error output, if any
@@ -166,7 +170,8 @@ runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure)
                             Just prop -> withProperties ctxt $ Map.insert prop outmsg properties
       streams = StepStreams (Just outmsg) (Just errmsg)
       status = toExitCode rc
-  unless (rc == ExitSuccess) $ zzLog Error (show cmd ++ " failed: " ++ show rc)
+  unless (rc == ExitSuccess) $
+    zzLog Error (prettyCommand cmd ++ " failed: " ++ show rc)
   return (ctxt', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
   where haltBuilds Common.Success = False
         haltBuilds Common.Warning = False
