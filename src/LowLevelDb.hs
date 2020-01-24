@@ -92,7 +92,8 @@ withDatabase filepath action =
     \  )"
 
 withReadConnection
-  :: (Member (Reader Database) effs, LastMember IO effs)
+  :: Member (Reader Database) effs
+  => LastMember IO effs
   => (Connection -> IO a)
   -> Eff effs a
 withReadConnection action = do
@@ -100,7 +101,8 @@ withReadConnection action = do
   sendM (RWL.withRead lock (action conn))
 
 withWriteConnection
-  :: (Member (Reader Database) effs, LastMember IO effs)
+  :: Member (Reader Database) effs
+  => LastMember IO effs
   => (Connection -> IO a)
   -> Eff effs a
 withWriteConnection action = do
@@ -108,13 +110,15 @@ withWriteConnection action = do
   sendM (RWL.withWrite lock (action conn))
 
 runLowLevelDbOpsWithSQLite
-  :: (Member (Reader Database) effs, LastMember IO effs)
+  :: Member (Reader Database) effs
+  => LastMember IO effs
   => Eff (LowLevelDbOperations ': effs)
   ~> Eff effs
 runLowLevelDbOpsWithSQLite = interpret dbToIO
 
 dbToIO
-  :: (Member (Reader Database) effs, LastMember IO effs)
+  :: Member (Reader Database) effs
+  => LastMember IO effs
   => LowLevelDbOperations
   ~> Eff effs
 dbToIO (StartBuild builderName) =
