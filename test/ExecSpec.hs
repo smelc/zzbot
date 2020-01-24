@@ -163,14 +163,28 @@ dbToState = reinterpret $ \case
 spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
-      (process Execute env testXml & runError & runExecAsDisplayLog & runStubDbOps & run)
-        `shouldBe` expectedOutput
+      (process Execute env testXml
+         & runError
+         & runExecAsDisplayLog
+         & runStubDbOps
+         & run)
+      `shouldBe` expectedOutput
     it "should set the working directory as specified" $
-      (process Execute env testXml & runError & runExecAsExecutionLog & runStubDbOps & run)
-        `shouldBe` expectedTrace
+      (process Execute env testXml
+         & runError
+         & runExecAsExecutionLog
+         & runStubDbOps
+         & run)
+      `shouldBe` expectedTrace
     it "should write the expected information in the DB" $
-      (process Execute env testXml & runError @ExitCode & runStubExec & runDbOpsWithFakeDb emptyFakeDb & run & snd & normalizeFakeDb)
-        `shouldBe` expectedDb
+      (process Execute env testXml
+         & runError @ExitCode
+         & runStubExec
+         & runDbOpsWithFakeDb emptyFakeDb
+         & run
+         & snd -- we don't care for the return value, we just want the db
+         & normalizeFakeDb)
+      `shouldBe` expectedDb
   where
     env = ProcessEnv "/test/workdir" [("ENV_VAR", "a")]
     testXml =
