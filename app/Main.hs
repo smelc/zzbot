@@ -1,24 +1,23 @@
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
 
 module Main where
 
-import Config
 import Control.Applicative
-import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.Freer
+import Control.Monad.Freer.Error
+import Control.Monad.Freer.Reader
 import Data.List.NonEmpty (NonEmpty)
-import Data.Maybe
-import Data.Validation
+import Data.Function
 import System.Directory
 import System.Environment
 import System.Exit
 
+import Config
 import Db
-import LowLevelDb
 import Exec
-import Xml
+import LowLevelDb
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
@@ -54,9 +53,16 @@ optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
 runConcreteStack
   :: Database
-  -> ReaderT Database (ExceptT ExitCode IO) a
+  -> Eff '[Exec, DbOperations, Reader Database, Error ExitCode, IO] a
   -> IO (Either ExitCode a)
-runConcreteStack db = runExceptT . flip runReaderT db
+runConcreteStack db action =
+  action
+    & runExecWithIO
+    & interpretDbOpsAsLowLevelDbOps
+    & runLowLevelDbOpsWithSQLite
+    & runReader db
+    & runError
+    & runM
 
 main :: IO ()
 main = do
@@ -65,8 +71,7 @@ main = do
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
   withDatabase optDatabasePath $ \db -> do
-    res <- runConcreteStack db $ traverse
-      (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) optProcessMode env) xmls
+    res <- runConcreteStack db $ traverse (process optProcessMode env) xmls
     case res of
       Left code -> exitWith code
       _ -> return ()
