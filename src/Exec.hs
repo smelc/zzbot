@@ -53,14 +53,13 @@ parsingErrorCode = ExitFailure 1
 substitutionErrorCode = ExitFailure 2
 subprocessErrorCode = ExitFailure 3
 
+type Properties = Map.Map String String
+
 -- The second element maps build variables to their values
 data BuildContext = BuildContext
   { buildState :: BuildState
   , properties :: Map.Map String String
   }
-
-withProperties :: BuildContext -> Map.Map String String -> BuildContext
-withProperties BuildContext{buildState} = BuildContext buildState
 
 data LogLevel = Info | Error
   deriving (Eq, Show)
@@ -137,10 +136,10 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList properties) step)
   stepID <- startStep @s2 buildState step'
-  (ctxt', streams, status, continue) <- runStep @s1 ctxt step'
-  endStep @s2 (snoc buildState status) stepID streams status
+  (properties', streams, status, continue) <- runStep @s1 properties step'
+  buildState' <- endStep @s2 (snoc buildState status) stepID streams status
   unless continue $ throwError subprocessErrorCode
-  runSteps @s1 @s2 ctxt' steps
+  runSteps @s1 @s2 (BuildContext buildState' properties') steps
 
 prettyCommand :: Command -> String
 prettyCommand (Command cmd []) = cmd
@@ -149,26 +148,26 @@ prettyCommand (Command cmd args) = cmd ++ " " ++ unwords args
 runStep
   :: forall s m
    . MonadExec s m
-  => BuildContext
+  => Properties
   -> Step Substituted -- ^ The step to execute
-  -> m (BuildContext, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
-runStep ctxt@BuildContext{properties} (SetPropertyFromValue prop value) =
-  return (ctxt', StepStreams Nothing Nothing, Common.Success, True)
-  where ctxt' = withProperties ctxt $ Map.insert prop value properties
-runStep ctxt@BuildContext{properties} (ShellCmd workdir cmd mprop haltOnFailure) = do
+  -> m (Properties, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
+runStep properties (SetPropertyFromValue prop value) =
+  return (properties', StepStreams Nothing Nothing, Common.Success, True)
+  where properties' = Map.insert prop value properties
+runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
   let infoSuffix :: String = case mprop of Nothing -> ""
                                            Just prop -> " → " ++ prop
   zzLog @s Info (prettyCommand cmd ++ infoSuffix)
   (rc, outmsg, errmsg) <- runShellCommand @s workdir cmd
   unless (null outmsg) $ putOut @s outmsg -- show step normal output, if any
   unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
-  let ctxt' = case mprop of Nothing -> ctxt
-                            Just prop -> withProperties ctxt $ Map.insert prop outmsg properties
+  let properties' = case mprop of Nothing -> properties
+                                  Just prop -> Map.insert prop outmsg properties
       streams = StepStreams (Just outmsg) (Just errmsg)
       status = toExitCode rc
   unless (rc == ExitSuccess) $
     zzLog @s Error (prettyCommand cmd ++ " failed: " ++ show rc)
-  return (ctxt', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
+  return (properties', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
   where haltBuilds Common.Success = False
         haltBuilds Common.Warning = False
         haltBuilds Common.Cancellation = True
