@@ -220,7 +220,8 @@ spec =
                       , mprop = Nothing
                       , haltOnFailure = True
                       }
-                  , stepEntryStreams = Just (StepStreams (Just "foo bar") (Just ""))
+                  , stepEntryStreams =
+                      Just (StepStreams (Just "foo bar") (Just ""))
                   , stepEntryStatus = Just Success
                   }
               , StepEntry
