@@ -151,10 +151,11 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList properties) step)
   stepID <- startStep buildState step'
-  (ctxt', streams, status, continue) <- runStep ctxt step'
-  buildState' <- endStep buildState stepID streams status
+  (BuildContext buildState' properties', streams, status, continue) <-
+    runStep ctxt step'
+  buildState'' <- endStep buildState' stepID streams status
   unless continue $ throwError subprocessErrorCode
-  runSteps (ctxt' {buildState=buildState'}) steps
+  runSteps (BuildContext buildState'' properties') steps
 
 prettyCommand :: Command -> String
 prettyCommand (Command cmd []) = cmd
