@@ -92,8 +92,9 @@ runStubDbOps = interpret $ \case
 
 -- FakeDb mock exec
 
-newtype BuildEntry = BuildEntry
+data BuildEntry = BuildEntry
   { buildEntryName :: String
+  , buildEntryStatus :: Maybe Status
   }
   deriving (Eq, Ord, Show)
 
@@ -143,9 +144,10 @@ dbToState
 dbToState = reinterpret $ \case
   (StartBuild name) -> do
     buildId <- freshId
-    modify $ fakeDbBuilds . at buildId ?~ BuildEntry name
+    modify $ fakeDbBuilds . at buildId ?~ BuildEntry name Nothing
     return (BuildState buildId Success)
-  (EndBuild (BuildState buildId status)) ->
+  (EndBuild (BuildState buildId status)) -> do
+    modify $ fakeDbBuilds . ix buildId %~ updateBuildEntry status
     return status
   (StartStep (BuildState buildId _) step) -> do
     stepId <- freshId
@@ -157,6 +159,8 @@ dbToState = reinterpret $ \case
  where
   updateStepEntry streams status (StepEntry step _ _) =
     StepEntry step (Just streams) (Just status)
+  updateBuildEntry status (BuildEntry name _) =
+    BuildEntry name (Just status)
 
 -- Tests
 
@@ -225,7 +229,10 @@ spec =
       )
     expectedDb =
       M.fromList
-        [ ( BuildEntry {buildEntryName = "test"}
+        [ ( BuildEntry
+              { buildEntryName = "test"
+              , buildEntryStatus = Just Failure
+              }
           , S.fromList
               [ StepEntry
                   { stepEntryStep = ShellCmd
