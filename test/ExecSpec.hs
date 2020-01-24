@@ -1,13 +1,17 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 
 module ExecSpec (spec) where
 
 import Common (Status(Success))
 import Config
-import Control.Monad.Writer
-import Control.Monad.Except
+import Control.Monad.Freer
+import Control.Monad.Freer.Error
+import Control.Monad.Freer.Writer
+import Data.Function
 import Db
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Exec
@@ -29,60 +33,53 @@ data LogEntry
   | StdErr   String
   deriving (Eq, Show)
 
-newtype LoggingMockExec a = LoggingMockExec (Writer [LogEntry] a)
-  deriving (Functor, Applicative, Monad, MonadWriter [LogEntry])
-
-runLoggingMockExec :: LoggingMockExec a -> (a, [LogEntry])
-runLoggingMockExec (LoggingMockExec m) = runWriter m
-
-instance MonadExec () LoggingMockExec where
-  zzLog level entry = tell [Message level entry]
-  runShellCommand _ cmd = return (mockShellCommand cmd)
-  putOut   str = tell [StdOut str]
-  putErr   str = tell [StdErr str]
-
-instance DbOperations () LoggingMockExec where
-   startBuild name = return (BuildState 0 [])
-   startStep state desc = return 0 -- FIXME smelc
-   endStep state stepID streams status = return state -- FIXME smelc
-   endBuild state = return Success
-
--- Tracing mock exec
+runExecAsDisplayLog
+  :: Eff (Exec ': effs) a
+  -> Eff effs (a, [LogEntry])
+runExecAsDisplayLog = runWriter . execToWriter
+ where
+  execToWriter :: Eff (Exec ': effs) ~> Eff (Writer [LogEntry] ': effs)
+  execToWriter = reinterpret $ \case
+    ZzLog level entry -> tell [Message level entry]
+    RunShellCommand _ cmd -> return (mockShellCommand cmd)
+    PutOut str -> tell [StdOut str]
+    PutErr str -> tell [StdErr str]
 
 data Execution = Execution String Command
   deriving (Eq, Show)
 
-data UsingTracingMockExec
+runExecAsExecutionLog
+  :: Eff (Exec ': effs) a
+  -> Eff effs (a, [Execution])
+runExecAsExecutionLog = runWriter . execToWriter
+ where
+  execToWriter :: Eff (Exec ': effs) ~> Eff (Writer [Execution] ': effs)
+  execToWriter = reinterpret $ \case
+    ZzLog color entry -> return ()
+    RunShellCommand workdir command -> do
+      tell [Execution workdir command]
+      return (mockShellCommand command)
+    PutOut str -> return ()
+    PutErr str -> return ()
 
-newtype TracingMockExec a = TracingMockExec (Writer [Execution] a)
-  deriving (Functor, Applicative, Monad, MonadWriter [Execution])
-
-runTracingMockExec :: TracingMockExec a -> (a, [Execution])
-runTracingMockExec (TracingMockExec m) = runWriter m
-
-instance MonadExec () TracingMockExec where
-  zzLog color entry = return ()
-  runShellCommand workdir command = do
-    tell [Execution workdir command]
-    return (mockShellCommand command)
-  putOut   str = return ()
-  putErr   str = return ()
-
-instance DbOperations () TracingMockExec where
-   startBuild name = return (BuildState 0 [])
-   startStep state desc = return 0 -- FIXME smelc
-   endStep state stepID streams status = return state -- FIXME smelc
-   endBuild state = return Success
+runStubDbOps
+  :: Eff (DbOperations ': effs)
+  ~> Eff effs
+runStubDbOps = interpret $ \case
+   StartBuild name -> return (BuildState 0 Success)
+   StartStep state desc -> return 0
+   EndStep state stepID streams status -> return state
+   EndBuild state -> return Success
 
 -- Tests
 
 spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
-      runLoggingMockExec (runExceptT (process @() @() Execute env testXml))
+      (process Execute env testXml & runError & runExecAsDisplayLog & runStubDbOps & run)
         `shouldBe` expectedOutput
     it "should set the working directory as specified" $
-      runTracingMockExec (runExceptT (process @() @() Execute env testXml))
+      (process Execute env testXml & runError & runExecAsExecutionLog & runStubDbOps & run)
         `shouldBe` expectedTrace
   where
     env = ProcessEnv "/test/workdir" [("ENV_VAR", "a")]
@@ -99,18 +96,18 @@ spec =
       \</config>"
     expectedOutput =
       ( Left (ExitFailure 3)
-      , [ Message Info "ls a"
+      , [ Message LogLevelInfo "ls a"
         , StdOut "foo bar"
-        , Message Info "ls b"
+        , Message LogLevelInfo "ls b"
         , StdOut "bar baz"
-        , Message Info "ls b"
+        , Message LogLevelInfo "ls b"
         , StdOut "bar baz"
-        , Message Info "some junk 1"
+        , Message LogLevelInfo "some junk 1"
         , StdErr "command not found"
-        , Message Error "some junk 1 failed: ExitFailure 127"
-        , Message Info "some junk 2"
+        , Message LogLevelError "some junk 1 failed: ExitFailure 127"
+        , Message LogLevelInfo "some junk 2"
         , StdErr "command not found"
-        , Message Error "some junk 2 failed: ExitFailure 127"
+        , Message LogLevelError "some junk 2 failed: ExitFailure 127"
         ]
       )
     expectedTrace =
