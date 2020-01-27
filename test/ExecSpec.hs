@@ -237,7 +237,7 @@ spec =
               [ StepEntry
                   { stepEntryStep = ShellCmd
                       { workdir = "/test/workdir/dir1"
-                      , cmd = Command "ls" ["a"]
+                      , cmd = Command "ls a"
                       , mprop = Nothing
                       , haltOnFailure = True
                       }
@@ -248,7 +248,7 @@ spec =
               , StepEntry
                   { stepEntryStep = ShellCmd
                       { workdir = "/test/workdir/dir1/dir2"
-                      , cmd = Command "ls" ["b"]
+                      , cmd = Command "ls b"
                       , mprop = Nothing
                       , haltOnFailure = True
                       }
@@ -259,7 +259,7 @@ spec =
               , StepEntry
                   { stepEntryStep = ShellCmd
                       { workdir = "/absolute/dir"
-                      , cmd = Command "ls" ["b"]
+                      , cmd = Command "ls b"
                       , mprop = Nothing
                       , haltOnFailure = True
                       }
@@ -270,7 +270,7 @@ spec =
               , StepEntry
                   { stepEntryStep = ShellCmd
                       { workdir = "/test/workdir/dir1"
-                      , cmd = Command "some" ["junk", "1"]
+                      , cmd = Command "some junk 1"
                       , mprop = Nothing
                       , haltOnFailure = False
                       }
@@ -281,7 +281,7 @@ spec =
               , StepEntry
                   { stepEntryStep = ShellCmd
                       { workdir = "/test/workdir/dir1"
-                      , cmd = Command "some" ["junk", "2"]
+                      , cmd = Command "some junk 2"
                       , mprop = Nothing
                       , haltOnFailure = True
                       }
