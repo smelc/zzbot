@@ -88,8 +88,8 @@ type Forall (c :: Type -> Constraint) (p :: Phase) =
   , c (StepExtensionType p)
   )
 
-data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
-  deriving (Eq, Show, Generic)
+newtype Command = Command { cmdString :: String }
+  deriving (Eq, Ord, Show, Generic)
 
 instance J.ToJSON Command
 instance J.FromJSON Command
@@ -104,6 +104,7 @@ data Step (p :: Phase)
   | Ext (StepExtensionType p)
 
 deriving instance Forall Eq p => Eq (Step p)
+deriving instance Forall Ord p => Ord (Step p)
 deriving instance Forall Show p => Show (Step p)
 deriving instance Forall Generic p => Generic (Step p)
 instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (Step p)
@@ -115,6 +116,7 @@ data ForeachExtension (p :: Phase) = Foreach
   }
 
 deriving instance Forall Eq p => Eq (ForeachExtension p)
+deriving instance Forall Ord p => Ord (ForeachExtension p)
 deriving instance Forall Show p => Show (ForeachExtension p)
 deriving instance Forall Generic p => Generic (ForeachExtension p)
 instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (ForeachExtension p)
@@ -127,6 +129,7 @@ data Builder (p :: Phase) = Builder
   }
 
 deriving instance Forall Eq p => Eq (Builder p)
+deriving instance Forall Ord p => Ord (Builder p)
 deriving instance Forall Show p => Show (Builder p)
 deriving instance Forall Generic p => Generic (Builder p)
 instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (Builder p)
@@ -138,6 +141,7 @@ data Config (p :: Phase) = Config
   }
 
 deriving instance Forall Eq p => Eq (Config p)
+deriving instance Forall Ord p => Ord (Config p)
 deriving instance Forall Show p => Show (Config p)
 deriving instance Forall Generic p => Generic (Config p)
 instance (Forall J.ToJSON p, Forall Generic p) => J.ToJSON (Config p)
@@ -222,10 +226,8 @@ instance (Traversable t, Substable a b) => Substable (t a) (t b) where
     substitute delimiters subst = traverse (substitute delimiters subst)
 
 instance Substable Command Command where
-  substitute delimiters subst (Command cmd args) =
-    Command
-      <$> applySubstitution delimiters subst cmd
-      <*> traverse (applySubstitution delimiters subst) args
+  substitute delimiters subst (Command cmd) =
+    Command <$> applySubstitution delimiters subst cmd
 
 instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool, StepExtensionType a ~ Void) => Substable (Step a) (Step Substituted) where
   substitute delimiters subst (SetPropertyFromValue prop value) =
