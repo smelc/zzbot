@@ -58,13 +58,13 @@ testSubstitute = do
   builder =
     Builder () "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-      , ShellCmd "(b)" (Command "ls" ["(a)", "(b)"]) Nothing True
+      , ShellCmd "(b)" (Command "ls (a) (b)") Nothing True
       ]
   goodSubst = [("a", "xx"), ("b", "yy")]
   expectedSuccess =
     Builder () "builder"
       [ SetPropertyFromValue "prop" "fooxxbaryybaz"
-      , ShellCmd "yy" (Command "ls" ["xx", "yy"]) Nothing True
+      , ShellCmd "yy" (Command "ls xx yy") Nothing True
       ]
   badSubst = [("c", "xx")]
   expectedErrors = Set.fromList
@@ -107,7 +107,7 @@ testNormalize =
             , steps =
                 [ ShellCmd
                     { workdir = stepWorkdir
-                    , cmd = Command "" []
+                    , cmd = Command ""
                     , mprop = Nothing
                     , haltOnFailure = Nothing
                     }
@@ -125,7 +125,7 @@ testNormalize =
             , steps =
                 [ ShellCmd
                     { workdir = exepectedStepWorkdir
-                    , cmd = Command "" []
+                    , cmd = Command ""
                     , mprop = Nothing
                     , haltOnFailure = True
                     }

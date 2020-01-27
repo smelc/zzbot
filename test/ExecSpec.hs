@@ -21,8 +21,8 @@ import Test.Hspec
 -- Mock behavior for shell commands, used by both LoggingMockExec and
 -- TracingMockExec
 
-mockShellCommand (Command "ls" ["a"]) = (ExitSuccess, "foo bar", "")
-mockShellCommand (Command "ls" ["b"]) = (ExitSuccess, "bar baz", "")
+mockShellCommand (Command "ls a") = (ExitSuccess, "foo bar", "")
+mockShellCommand (Command "ls b") = (ExitSuccess, "bar baz", "")
 mockShellCommand _ = (ExitFailure 127, "", "command not found")
 
 -- Logging mock exec
@@ -112,10 +112,10 @@ spec =
       )
     expectedTrace =
       ( Left (ExitFailure 3)
-      , [ Execution "/test/workdir/dir1" (Command "ls" ["a"])
-        , Execution "/test/workdir/dir1/dir2" (Command "ls" ["b"])
-        , Execution "/absolute/dir" (Command "ls" ["b"])
-        , Execution "/test/workdir/dir1" (Command "some" ["junk", "1"])
-        , Execution "/test/workdir/dir1" (Command "some" ["junk", "2"])
+      , [ Execution "/test/workdir/dir1" (Command "ls a")
+        , Execution "/test/workdir/dir1/dir2" (Command "ls b")
+        , Execution "/absolute/dir" (Command "ls b")
+        , Execution "/test/workdir/dir1" (Command "some junk 1")
+        , Execution "/test/workdir/dir1" (Command "some junk 2")
         ]
       )

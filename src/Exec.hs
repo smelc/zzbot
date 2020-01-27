@@ -70,8 +70,8 @@ data Exec :: Type -> Type where
     :: String                       -- ^ The working directory
     -> Command                      -- ^ The command to execute
     -> Exec (ExitCode, String, String) -- ^ return code, stdout, stderr
-  PutOut   :: String -> Exec ()
-  PutErr   :: String -> Exec ()
+  PutOut :: String -> Exec ()
+  PutErr :: String -> Exec ()
 
 zzLog :: Member Exec effs => LogLevel -> String -> Eff effs ()
 zzLog logLevel logEntry = send (ZzLog logLevel logEntry)
@@ -105,10 +105,10 @@ execToIO (ZzLog logLevel logEntry) =
   style
     | LogLevelInfo <- logLevel = color Green
     | LogLevelError <- logLevel = color Red
-execToIO (RunShellCommand workdir Command{cmdFilename, cmdArgs}) =
+execToIO (RunShellCommand workdir Command{cmdString}) =
   sendM $ readCreateProcessWithExitCode createProcess ""
  where
-  createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
+  createProcess = (shell cmdString) { cwd = Just workdir }
 execToIO (PutOut str) = sendM (putStr str)
 execToIO (PutErr str) = sendM (hPutStr stderr str)
 
@@ -159,10 +159,6 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
   unless continue $ throwError subprocessErrorCode
   runSteps (BuildContext buildState' properties') steps
 
-prettyCommand :: Command -> String
-prettyCommand (Command cmd []) = cmd
-prettyCommand (Command cmd args) = cmd ++ " " ++ unwords args
-
 runStep
   :: Member Exec effs
   => Properties
@@ -186,7 +182,8 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
   unless (rc == ExitSuccess) $
     zzLog LogLevelError (prettyCommand cmd ++ " failed: " ++ show rc)
   return (properties', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
-  where haltBuilds Common.Success = False
+  where prettyCommand Command{cmdString} = cmdString
+        haltBuilds Common.Success = False
         haltBuilds Common.Warning = False
         haltBuilds Common.Cancellation = True
         haltBuilds Common.Failure = True
