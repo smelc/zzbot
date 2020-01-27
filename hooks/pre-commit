@@ -63,7 +63,7 @@ do
 done
 
 # Check that zzbot succeeds on some configurations:
-SUCCESS_CONFIGS="config.xml tests/haltOnFailure2.xml tests/haltOnFailure3.xml"
+SUCCESS_CONFIGS="config.xml tests/db1.xml tests/db_nonull.xml tests/haltOnFailure2.xml tests/haltOnFailure3.xml"
 for CONFIG in $SUCCESS_CONFIGS
 do
   stack exec zzbot -- configs/$CONFIG || exit $?
