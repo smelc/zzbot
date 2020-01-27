@@ -26,6 +26,7 @@ import Control.Monad.Freer.Error
 import Data.Foldable (traverse_)
 import Data.Kind
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.List
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
@@ -174,9 +175,8 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
   (rc, outmsg, errmsg) <- runShellCommand workdir cmd
   unless (null outmsg) $ putOut outmsg -- show step normal output, if any
   unless (null errmsg) $ putErr errmsg -- show step error output, if any
-  let properties' = case mprop of
-                      Nothing -> properties
-                      Just prop -> Map.insert prop outmsg properties
+  let properties' = case mprop of Nothing -> properties
+                                  Just prop -> Map.insert prop (normalize outmsg) properties
       streams = StepStreams (Just outmsg) (Just errmsg)
       status = toExitCode rc
   unless (rc == ExitSuccess) $
@@ -188,6 +188,10 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
         haltBuilds Common.Cancellation = True
         haltBuilds Common.Failure = True
         haltBuilds Common.Error = True
+        normalize (propValue :: String) -- One usually doesn't want the trailing newline in build properties
+          | ("\n" :: String) `isSuffixOf` propValue =
+              take (length propValue - length ("\n" :: String)) propValue
+          | otherwise = propValue
 runStep _ (Ext ext) = absurd ext
 
 runBuild
