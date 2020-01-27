@@ -88,7 +88,7 @@ type Forall (c :: Type -> Constraint) (p :: Phase) =
   , c (StepExtensionType p)
   )
 
-data Command = Command { cmdFilename :: String, cmdArgs :: [String] }
+newtype Command = Command { cmdString :: String }
   deriving (Eq, Show, Generic)
 
 instance J.ToJSON Command
@@ -222,10 +222,8 @@ instance (Traversable t, Substable a b) => Substable (t a) (t b) where
     substitute delimiters subst = traverse (substitute delimiters subst)
 
 instance Substable Command Command where
-  substitute delimiters subst (Command cmd args) =
-    Command
-      <$> applySubstitution delimiters subst cmd
-      <*> traverse (applySubstitution delimiters subst) args
+  substitute delimiters subst (Command cmd) =
+    Command <$> applySubstitution delimiters subst cmd
 
 instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool, StepExtensionType a ~ Void) => Substable (Step a) (Step Substituted) where
   substitute delimiters subst (SetPropertyFromValue prop value) =

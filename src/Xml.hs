@@ -174,12 +174,13 @@ zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
   let workdir = lookupAttrValue zxml aWorkdir
       mprop = lookupAttrValue zxml aProperty
   validateShellOrSetPropFromCmd shellOrSetPropertyFromCmd mprop maybeLine
-  cmd <- parseAttrValue zxml aCommand (parseCommand . words)
+  cmd <- parseAttrValue zxml aCommand parseCommand
   haltOnFailure <- parseOptionalBoolAttrValue zxml aHaltOnFailure
   return (ShellCmd workdir cmd mprop haltOnFailure)
  where
-  parseCommand [] = failWith (EmptyCommand maybeLine)
-  parseCommand (filepath:args) = pure (Command filepath args)
+  parseCommand cmdString
+    | all isSpace cmdString = failWith (EmptyCommand maybeLine)
+    | otherwise = pure $ Command cmdString
 
 parseStep :: ZXML -> XmlValidation (Step Parsed)
 parseStep zxml@ZElem {tag, maybeLine}

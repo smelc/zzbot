@@ -86,10 +86,10 @@ instance (Monad m, MonadIO m) => MonadExec UsingIOForExec m where
       | Info <- logLevel = color Green
       | Error <- logLevel = color Red
 
-  runShellCommand workdir Command{cmdFilename, cmdArgs} =
+  runShellCommand workdir Command{cmdString} =
     liftIO $ readCreateProcessWithExitCode createProcess ""
    where
-    createProcess = (proc cmdFilename cmdArgs) { cwd = Just workdir }
+    createProcess = (shell cmdString) { cwd = Just workdir }
 
   putOut = liftIO . putStr
   putErr = liftIO . hPutStr stderr
@@ -141,10 +141,6 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
   unless continue $ throwError subprocessErrorCode
   runSteps @s1 @s2 (BuildContext buildState' properties') steps
 
-prettyCommand :: Command -> String
-prettyCommand (Command cmd []) = cmd
-prettyCommand (Command cmd args) = cmd ++ " " ++ unwords args
-
 runStep
   :: forall s m
    . MonadExec s m
@@ -168,7 +164,8 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
   unless (rc == ExitSuccess) $
     zzLog @s Error (prettyCommand cmd ++ " failed: " ++ show rc)
   return (properties', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
-  where haltBuilds Common.Success = False
+  where prettyCommand Command{cmdString} = cmdString
+        haltBuilds Common.Success = False
         haltBuilds Common.Warning = False
         haltBuilds Common.Cancellation = True
         haltBuilds Common.Failure = True
