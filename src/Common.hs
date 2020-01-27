@@ -24,3 +24,4 @@ data StepStreams = StepStreams
   { stdout :: Maybe String
   , stderr :: Maybe String
   }
+  deriving (Eq, Ord, Show)

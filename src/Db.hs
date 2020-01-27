@@ -17,14 +17,7 @@ import Common
 import Config
 import LowLevelDb
 
--- | The state of a build, as exposed to clients of this file
--- TODO smelc keep only the maximum of statuses gathered so far, no need to keep the list
--- This'll get rid of the snoc business whose complexity is bad
-data BuildState = BuildState BuildID [Status]
-
-snoc :: BuildState -> Status -> BuildState
-snoc (BuildState buildID statuses) status =
-   BuildState buildID $ Data.List.Extra.snoc statuses status
+data BuildState = BuildState BuildID Status
 
 class Monad m => DbOperations s m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
@@ -44,13 +37,12 @@ data UsingLowLevelDb s
 instance (Monad m, LowLevelDbOperations s m) => DbOperations (UsingLowLevelDb s) m where
     startBuild builderName = do
        buildID <- LowLevelDb.startBuild @s builderName
-       return $ BuildState buildID []
+       return $ BuildState buildID Success
     startStep buildState@(BuildState buildID _) step =
        LowLevelDb.startStep @s buildID (J.encode step)
-    endStep buildState stepID streams status = do
+    endStep (BuildState buildId buildStatus) stepID streams status = do
        LowLevelDb.endStep @s stepID streams status
-       return $ Db.snoc buildState status
-    endBuild buildState@(BuildState buildID statuses) = do
-       let status = foldr max Success statuses
+       return $ BuildState buildId (max buildStatus status)
+    endBuild buildState@(BuildState buildID status) = do
        LowLevelDb.endBuild @s buildID status
        return status
