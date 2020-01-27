@@ -1,22 +1,30 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module ExecSpec (spec) where
 
-import Common (Status(Success))
+import Common hiding (Error)
 import Config
-import Control.Monad.Writer
+import Control.Lens
 import Control.Monad.Except
+import Control.Monad.State
+import Control.Monad.Writer
+import Data.Function
 import Db
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Exec
 import System.Exit
 import Test.Hspec
 
+import qualified Data.Map as M
+import qualified Data.Set as S
+
 -- Mock behavior for shell commands, used by both LoggingMockExec and
 -- TracingMockExec
-
 mockShellCommand (Command "ls a") = (ExitSuccess, "foo bar", "")
 mockShellCommand (Command "ls b") = (ExitSuccess, "bar baz", "")
 mockShellCommand _ = (ExitFailure 127, "", "command not found")
@@ -38,11 +46,11 @@ runLoggingMockExec (LoggingMockExec m) = runWriter m
 instance MonadExec () LoggingMockExec where
   zzLog level entry = tell [Message level entry]
   runShellCommand _ cmd = return (mockShellCommand cmd)
-  putOut   str = tell [StdOut str]
-  putErr   str = tell [StdErr str]
+  putOut str = tell [StdOut str]
+  putErr str = tell [StdErr str]
 
 instance DbOperations () LoggingMockExec where
-   startBuild name = return (BuildState 0 [])
+   startBuild name = return (BuildState 0 Success)
    startStep state desc = return 0 -- FIXME smelc
    endStep state stepID streams status = return state -- FIXME smelc
    endBuild state = return Success
@@ -51,8 +59,6 @@ instance DbOperations () LoggingMockExec where
 
 data Execution = Execution String Command
   deriving (Eq, Show)
-
-data UsingTracingMockExec
 
 newtype TracingMockExec a = TracingMockExec (Writer [Execution] a)
   deriving (Functor, Applicative, Monad, MonadWriter [Execution])
@@ -65,14 +71,87 @@ instance MonadExec () TracingMockExec where
   runShellCommand workdir command = do
     tell [Execution workdir command]
     return (mockShellCommand command)
-  putOut   str = return ()
-  putErr   str = return ()
+  putOut str = return ()
+  putErr str = return ()
 
 instance DbOperations () TracingMockExec where
-   startBuild name = return (BuildState 0 [])
-   startStep state desc = return 0 -- FIXME smelc
-   endStep state stepID streams status = return state -- FIXME smelc
+   startBuild name = return (BuildState 0 Success)
+   startStep state desc = return 0
+   endStep state stepID streams status = return state
    endBuild state = return Success
+
+-- FakeDb mock exec
+data BuildEntry = BuildEntry
+  { buildEntryName :: String
+  , buildEntryStatus :: Maybe Status
+  }
+  deriving (Eq, Ord, Show)
+
+data StepEntry = StepEntry
+  { stepEntryStep :: Step Substituted
+  , stepEntryStreams :: Maybe StepStreams
+  , stepEntryStatus :: Maybe Status
+  }
+  deriving (Eq, Ord, Show)
+
+data FakeDb = FakeDb
+  { _fakeDbCounter :: Int
+  , _fakeDbBuilds :: M.Map BuildID BuildEntry
+  , _fakeDbSteps :: M.Map (StepID, BuildID) StepEntry
+  }
+  deriving (Eq, Ord, Show)
+
+makeLenses ''FakeDb
+
+emptyFakeDb = FakeDb 0 mempty mempty
+
+type NormalizedFakeDb = (M.Map BuildEntry (S.Set StepEntry))
+
+normalizeFakeDb :: FakeDb -> NormalizedFakeDb
+normalizeFakeDb (FakeDb _ builds steps) =
+  M.fromList [(build, stepsFor id) | (id, build) <- M.toList builds]
+ where
+  stepsFor parentId = S.fromList
+    [step | ((_, buildId), step) <- M.toList steps, buildId == parentId]
+
+newtype FakeDbMockExec a = FakeDbMockExec (State FakeDb a)
+  deriving (Functor, Applicative, Monad, MonadState FakeDb)
+
+runFakeDbMockExec :: FakeDbMockExec a -> FakeDb -> (a, FakeDb)
+runFakeDbMockExec (FakeDbMockExec m) = runState m
+
+freshId :: FakeDbMockExec Int
+freshId = do
+  fakeDbCounter += 1
+  gets _fakeDbCounter
+
+instance MonadExec () FakeDbMockExec where
+  zzLog color entry = return ()
+  runShellCommand workdir command = return (mockShellCommand command)
+  putOut str = return ()
+  putErr str = return ()
+
+instance DbOperations () FakeDbMockExec where
+  startBuild name = do
+    buildId <- freshId
+    fakeDbBuilds . at buildId ?= BuildEntry name Nothing
+    return (BuildState buildId Success)
+  endBuild (BuildState buildId status) = do
+    fakeDbBuilds . ix buildId %= updateBuildEntry status
+    return status
+   where
+    updateBuildEntry status (BuildEntry name _) =
+      BuildEntry name (Just status)
+  startStep (BuildState buildId _) step = do
+    stepId <- freshId
+    fakeDbSteps . at (stepId, buildId) ?= StepEntry step Nothing Nothing
+    return stepId
+  endStep (BuildState buildId buildStatus) stepId streams status = do
+    fakeDbSteps . ix (stepId, buildId) %= updateStepEntry streams status
+    return (BuildState buildId (max buildStatus status))
+   where
+    updateStepEntry streams status (StepEntry step _ _) =
+      StepEntry step (Just streams) (Just status)
 
 -- Tests
 
@@ -84,6 +163,13 @@ spec =
     it "should set the working directory as specified" $
       runTracingMockExec (runExceptT (process @() @() Execute env testXml))
         `shouldBe` expectedTrace
+    it "should write the expected information in the DB" $
+      (process @() @() Execute env testXml
+        & runExceptT
+        & flip runFakeDbMockExec emptyFakeDb
+        & snd -- we don't care for the return value, we just want the db
+        & normalizeFakeDb)
+      `shouldBe` expectedDb
   where
     env = ProcessEnv "/test/workdir" [("ENV_VAR", "a")]
     testXml =
@@ -122,3 +208,68 @@ spec =
         , Execution "/test/workdir/dir1" (Command "some junk 2")
         ]
       )
+    expectedDb =
+      M.fromList
+        [ ( BuildEntry
+              { buildEntryName = "test"
+              , buildEntryStatus = Just Failure
+              }
+          , S.fromList
+              [ StepEntry
+                  { stepEntryStep = ShellCmd
+                      { workdir = "/test/workdir/dir1"
+                      , cmd = Command "ls a"
+                      , mprop = Nothing
+                      , haltOnFailure = True
+                      }
+                  , stepEntryStreams =
+                      Just (StepStreams (Just "foo bar") (Just ""))
+                  , stepEntryStatus = Just Success
+                  }
+              , StepEntry
+                  { stepEntryStep = ShellCmd
+                      { workdir = "/test/workdir/dir1/dir2"
+                      , cmd = Command "ls b"
+                      , mprop = Nothing
+                      , haltOnFailure = True
+                      }
+                  , stepEntryStreams =
+                      Just (StepStreams (Just "bar baz") (Just ""))
+                  , stepEntryStatus = Just Success
+                  }
+              , StepEntry
+                  { stepEntryStep = ShellCmd
+                      { workdir = "/absolute/dir"
+                      , cmd = Command "ls b"
+                      , mprop = Nothing
+                      , haltOnFailure = True
+                      }
+                  , stepEntryStreams =
+                      Just (StepStreams (Just "bar baz") (Just ""))
+                  , stepEntryStatus = Just Success
+                  }
+              , StepEntry
+                  { stepEntryStep = ShellCmd
+                      { workdir = "/test/workdir/dir1"
+                      , cmd = Command "some junk 1"
+                      , mprop = Nothing
+                      , haltOnFailure = False
+                      }
+                  , stepEntryStreams =
+                      Just (StepStreams (Just "") (Just "command not found"))
+                  , stepEntryStatus = Just Failure
+                  }
+              , StepEntry
+                  { stepEntryStep = ShellCmd
+                      { workdir = "/test/workdir/dir1"
+                      , cmd = Command "some junk 2"
+                      , mprop = Nothing
+                      , haltOnFailure = True
+                      }
+                  , stepEntryStreams =
+                      Just (StepStreams (Just "") (Just "command not found"))
+                  , stepEntryStatus = Just Failure
+                  }
+              ]
+          )
+        ]

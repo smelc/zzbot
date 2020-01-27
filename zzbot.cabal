@@ -64,6 +64,7 @@ test-suite spec
   build-depends:     base >= 4.7 && < 5,
                      containers,
                      hspec,
+                     lens,
                      mtl,
                      prettyprinter-ansi-terminal,
                      QuickCheck,
