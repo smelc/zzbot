@@ -21,7 +21,7 @@ stack install zzbot --local-bin-path INSTALL_PATH # INSTALL_PATH can for example
 Useful commands:
 
 * `stack build` build the `zzbot` executable
-* `stack exec zzbot -- configs/config.xml` executes the builders listed in `configs/config.xml`
+* `stack run zzbot configs/config.xml` executes the builders listed in `configs/config.xml`
 
 Test and documentation commmands:
 

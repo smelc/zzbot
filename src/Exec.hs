@@ -55,10 +55,10 @@ subprocessErrorCode = ExitFailure 3
 
 type Properties = Map.Map String String
 
--- The second element maps build variables to their values
+-- | The second element maps build variables to their values
 data BuildContext = BuildContext
-  { buildState :: BuildState
-  , properties :: Map.Map String String
+  { buildState :: BuildState -- ^ Build identifier and build status (so far)
+  , properties :: Map.Map String String -- ^ Build properties
   }
 
 data LogLevel = Info | Error
@@ -132,14 +132,17 @@ runSteps
   -> m BuildContext
 runSteps ctxt [] = return ctxt
 runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
-  step' <- inject @s1
+  step' <- inject @s1 -- it's OK to return using MonadError here, because startStep wasn't called yet
              substitutionErrorCode
              (substitute dynSubstDelimiters (Map.toList properties) step)
   stepID <- startStep @s2 buildState step'
+  -- We must call endStep now, no matter what happens. Could we handle that like a resource?
   (properties', streams, status, continue) <- runStep @s1 properties step'
   buildState' <- endStep @s2 buildState stepID streams status
-  unless continue $ throwError subprocessErrorCode
-  runSteps @s1 @s2 (BuildContext buildState' properties') steps
+  let ctxt' = BuildContext buildState' properties'
+  if continue then runSteps @s1 @s2 ctxt' steps
+  else return ctxt' -- FIXME smelc, we should return to the top level the code subprocessErrorCode
+                    -- The caller must be adapted
 
 runStep
   :: forall s m

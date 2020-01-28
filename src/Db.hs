@@ -17,6 +17,7 @@ import Common
 import Config
 import LowLevelDb
 
+-- | The build identifier and its status (so far)
 data BuildState = BuildState BuildID Status
 
 class Monad m => DbOperations s m where
