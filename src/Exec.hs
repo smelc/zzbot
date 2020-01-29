@@ -27,6 +27,7 @@ import Control.Arrow (left)
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Except
+import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.List
 import Data.Text.Prettyprint.Doc
@@ -202,18 +203,33 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 
 data ProcessMode = PrintOnly | Execute
 
+prepareConfig :: ProcessMode
+              -> ProcessEnv -- ^ The system's environment
+              -> String -- ^ The content of the XML file to process
+              -> Validation String (Config Substituted) -- ^ An error message or tHe configuration to execute
+prepareConfig mode ProcessEnv{Exec.workdir, sysenv} xml =
+  -- It's a bit tartelette because we deal with two instances of validation:
+  -- XmlValidation and ConfigValidation
+  let xmlValidation :: XmlValidation (Config Normalized) = normalize workdir <$> parseXmlString xml
+      normalizedConfig :: Validation String (Config Normalized) = first buildErrorMsg xmlValidation
+      in case normalizedConfig of
+           Success cn -> first buildErrorMsg $ substAll sysenv cn
+           Failure err -> Failure err
+  where
+    buildErrorMsg :: forall e . Show e => Set.Set e -> String
+    buildErrorMsg errors = unlines $ map show $ Set.toList errors
+
 process
   :: forall s1 s2 m
-   . (MonadExec s1 m, DbOperations s2 m, MonadError ExitCode m)
+   . (MonadExec s1 m, DbOperations s2 m)
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> m ()
-process mode ProcessEnv{Exec.workdir, sysenv} xml = do
-  parsedConfig <- inject @s1 parsingErrorCode (parseXmlString xml)
-  let normalizedConfig = normalize workdir parsedConfig
-  substitutedConfig@Config{builders} <-
-    inject @s1 substitutionErrorCode (substAll sysenv normalizedConfig)
-  case mode of
-    PrintOnly -> putOutLn @s1 (renderAsXml substitutedConfig)
-    Execute -> traverse_ (runBuild @s1 @s2) builders
+process mode env xml =
+  case prepareConfig mode env xml of
+    Failure errMsg -> zzLog @s1 Error errMsg
+    Success substitutedConfig@Config{builders} ->
+      case mode of
+        PrintOnly -> putOutLn @s1 (renderAsXml substitutedConfig)
+        Execute -> traverse_ (runBuild @s1 @s2) builders
