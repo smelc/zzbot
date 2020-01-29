@@ -47,11 +47,12 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified GHC.IO.Handle as Handle
 
-parsingErrorCode, substitutionErrorCode, subprocessErrorCode :: ExitCode
+parsingErrorCode, substitutionErrorCode, failureStatusErrorCode, errorStatusErrorCode :: ExitCode
 
-parsingErrorCode = ExitFailure 1
-substitutionErrorCode = ExitFailure 2
-subprocessErrorCode = ExitFailure 3
+parsingErrorCode = ExitFailure 1 -- ^ Configuration cannot be parsed
+substitutionErrorCode = ExitFailure 2 -- ^ Application of static substitution failed
+failureStatusErrorCode = ExitFailure 3 -- ^ Build returned 'Common.Failure'
+errorStatusErrorCode = ExitFailure 4 -- ^ Build returned 'Common.Error'
 
 type Properties = Map.Map String String
 
@@ -126,23 +127,28 @@ dynSubstDelimiters = ("«", "»")
 
 runSteps
   :: forall s1 s2 m
-   . (MonadExec s1 m, DbOperations s2 m, MonadError ExitCode m)
+   . (MonadExec s1 m, DbOperations s2 m)
   => BuildContext
   -> [Step Substituted]
   -> m BuildContext
 runSteps ctxt [] = return ctxt
-runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
-  step' <- inject @s1 -- it's OK to return using MonadError here, because startStep wasn't called yet
-             substitutionErrorCode
-             (substitute dynSubstDelimiters (Map.toList properties) step)
-  stepID <- startStep @s2 buildState step'
-  -- We must call endStep now, no matter what happens. Could we handle that like a resource?
-  (properties', streams, status, continue) <- runStep @s1 properties step'
-  buildState' <- endStep @s2 buildState stepID streams status
-  let ctxt' = BuildContext buildState' properties'
-  if continue then runSteps @s1 @s2 ctxt' steps
-  else return ctxt' -- FIXME smelc, we should return to the top level the code subprocessErrorCode
-                    -- The caller must be adapted
+runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
+  let vstep' = substitute dynSubstDelimiters (Map.toList properties) step in
+  case vstep' of
+    Failure errors -> do
+      zzLog @s1 Error (buildErrorMsg errors) 
+      return $ BuildContext (withMaxStatus buildState Common.Failure) properties 
+    Success step' -> do
+      stepID <- startStep @s2 buildState step'
+      -- We must call endStep now, no matter what happens. Could we handle that like a resource?
+      (properties', streams, status, continue) <- runStep @s1 properties step'
+      buildState' <- endStep @s2 buildState stepID streams status
+      let ctxt' = BuildContext buildState' properties'
+      if continue then runSteps @s1 @s2 ctxt' steps
+      else return ctxt'
+ where
+  buildErrorMsg :: forall e . Show e => Set.Set e -> String
+  buildErrorMsg errors = unlines $ map show $ Set.toList errors
 
 runStep
   :: forall s m
@@ -181,7 +187,7 @@ runStep _ (Ext ext) = absurd ext
 
 runBuild
   :: forall s1 s2 m
-   . (MonadExec s1 m, DbOperations s2 m, MonadError ExitCode m)
+   . (MonadExec s1 m, DbOperations s2 m)
   => Builder Substituted
   -> m ()
 runBuild (Builder () name steps) = do

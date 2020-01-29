@@ -20,6 +20,10 @@ import LowLevelDb
 -- | The build identifier and its status (so far)
 data BuildState = BuildState BuildID Status
 
+withMaxStatus :: BuildState -> Status -> BuildState
+withMaxStatus (BuildState buildID s1) s2 =
+   BuildState buildID (max s1 s2)
+
 class Monad m => DbOperations s m where
    startBuild :: String -> m BuildState -- ^ The string is the builder's name
    startStep :: BuildState -> Step Substituted -> m StepID -- ^ The string is the step's description
