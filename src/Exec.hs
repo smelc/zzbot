@@ -31,7 +31,6 @@ import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.Function
 import Data.List
-import Data.List.Extra
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
@@ -159,9 +158,11 @@ runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure)
   unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
   unless (rc == ExitSuccess) $
     zzLogError @s (cmdString ++ " failed: " ++ show rc)
-  let properties' = properties & maybe id (`Map.insert` trim outmsg) mprop
+  let properties' = properties & maybe id (`Map.insert` normalize outmsg) mprop
   let streams = StepStreams (Just outmsg) (Just errmsg)
   return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
+ where
+  normalize str = if last str == '\n' then init str else str
 runStep _ (Ext ext) = absurd ext
 
 runBuild
