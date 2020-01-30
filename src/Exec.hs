@@ -30,6 +30,7 @@ import Control.Monad.Except
 import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.List
+import Data.List.Extra
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
@@ -152,22 +153,13 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
   unless (null outmsg) $ putOut @s outmsg -- show step normal output, if any
   unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
   let properties' = case mprop of Nothing -> properties
-                                  Just prop -> Map.insert prop (normalize outmsg) properties
+                                  Just prop -> Map.insert prop (trim outmsg) properties
       streams = StepStreams (Just outmsg) (Just errmsg)
-      status = toExitCode rc
   unless (rc == ExitSuccess) $
     zzLog @s Error (prettyCommand cmd ++ " failed: " ++ show rc)
-  return (properties', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
-  where prettyCommand Command{cmdString} = cmdString
-        haltBuilds Common.Success = False
-        haltBuilds Common.Warning = False
-        haltBuilds Common.Cancellation = True
-        haltBuilds Common.Failure = True
-        haltBuilds Common.Error = True
-        normalize (propValue :: String) -- One usually doesn't want the trailing newline in build properties
-          | ("\n" :: String) `isSuffixOf` propValue =
-              take (length propValue - length ("\n" :: String)) propValue
-          | otherwise = propValue
+  return (properties', streams, toExitCode rc, not haltOnFailure || rc == ExitSuccess)
+ where
+  prettyCommand Command{cmdString} = cmdString
 runStep _ (Ext ext) = absurd ext
 
 runBuild
