@@ -51,10 +51,14 @@ import qualified GHC.IO.Handle as Handle
 
 parsingErrorCode, substitutionErrorCode, failureStatusErrorCode, errorStatusErrorCode :: ExitCode
 
-parsingErrorCode = ExitFailure 1 -- ^ Configuration cannot be parsed
-substitutionErrorCode = ExitFailure 2 -- ^ Application of static substitution failed
-failureStatusErrorCode = ExitFailure 3 -- ^ Build returned 'Common.Failure'
-errorStatusErrorCode = ExitFailure 4 -- ^ Build returned 'Common.Error'
+-- | Configuration cannot be parsed
+parsingErrorCode = ExitFailure 1
+-- | Application of static substitution failed
+substitutionErrorCode = ExitFailure 2
+-- | Build returned 'Common.Failure'
+failureStatusErrorCode = ExitFailure 3
+-- | Build returned 'Common.Error'
+errorStatusErrorCode = ExitFailure 4
 
 type Properties = Map.Map String String
 
