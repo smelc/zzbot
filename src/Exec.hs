@@ -39,7 +39,7 @@ import System.Exit
 import System.IO
 import System.Process
 
-import Common (StepStreams(StepStreams), toExitCode)
+import Common (StepStreams(StepStreams), toStatus)
 import Config
 import Db
 import Xml
@@ -157,7 +157,7 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
       streams = StepStreams (Just outmsg) (Just errmsg)
   unless (rc == ExitSuccess) $
     zzLog @s Error (prettyCommand cmd ++ " failed: " ++ show rc)
-  return (properties', streams, toExitCode rc, not haltOnFailure || rc == ExitSuccess)
+  return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
  where
   prettyCommand Command{cmdString} = cmdString
 runStep _ (Ext ext) = absurd ext
