@@ -162,6 +162,7 @@ runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure)
   let streams = StepStreams (Just outmsg) (Just errmsg)
   return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
  where
+  normalize "" = ""
   normalize str = if last str == '\n' then init str else str
 runStep _ (Ext ext) = absurd ext
 
