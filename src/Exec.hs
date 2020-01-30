@@ -123,8 +123,7 @@ runSteps
   -> m BuildContext
 runSteps ctxt [] = return ctxt
 runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
-  let vstep' = substitute dynSubstDelimiters (Map.toList properties) step in
-  case vstep' of
+  case substitute dynSubstDelimiters (Map.toList properties) step  of
     Failure errors -> do
       zzLog @s1 Error (buildErrorMsg errors)
       return $ BuildContext (withMaxStatus buildState Common.Failure) properties
@@ -136,9 +135,6 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
       let ctxt' = BuildContext buildState' properties'
       if continue then runSteps @s1 @s2 ctxt' steps
       else return ctxt'
- where
-  buildErrorMsg :: forall e . Show e => Set.Set e -> String
-  buildErrorMsg errors = unlines $ map show $ Set.toList errors
 
 runStep
   :: forall s m
@@ -183,8 +179,12 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 
 data ProcessMode = PrintOnly | Execute
 
+
+buildErrorMsg :: Show e => Set.Set e -> String
+buildErrorMsg errors = unlines $ map show $ Set.toList errors
+
 errorToString :: Show e => Validation (Set.Set e) a -> Validation String a
-errorToString = first (unlines . map show . Set.toList)
+errorToString = first buildErrorMsg
 
 prepareConfig :: ProcessMode
               -> ProcessEnv -- ^ The system's environment
