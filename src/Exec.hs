@@ -180,7 +180,7 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 data ProcessMode = PrintOnly | Execute
 
 errorToString :: Show e => Validation (Set.Set e) a -> Validation String a
-errorToString = first (unlines . map show . Set.toList )
+errorToString = first (unlines . map show . Set.toList)
 
 prepareConfig :: ProcessMode
               -> ProcessEnv -- ^ The system's environment
