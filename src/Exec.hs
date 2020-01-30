@@ -29,6 +29,7 @@ import Control.Monad.Trans
 import Control.Monad.Except
 import Data.Bifunctor
 import Data.Foldable (traverse_)
+import Data.Function
 import Data.List
 import Data.List.Extra
 import Data.Text.Prettyprint.Doc
@@ -145,21 +146,16 @@ runStep
 runStep properties (SetPropertyFromValue prop value) =
   return (properties', StepStreams Nothing Nothing, Common.Success, True)
   where properties' = Map.insert prop value properties
-runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
-  let infoSuffix :: String = case mprop of Nothing -> ""
-                                           Just prop -> " → " ++ prop
-  zzLog @s Info (prettyCommand cmd ++ infoSuffix)
+runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure) = do
+  zzLog @s Info (cmdString ++ maybe "" (" → " ++) mprop)
   (rc, outmsg, errmsg) <- runShellCommand @s workdir cmd
-  unless (null outmsg) $ putOut @s outmsg -- show step normal output, if any
+  unless (null outmsg) $ putOut @s outmsg -- show step standard output, if any
   unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
-  let properties' = case mprop of Nothing -> properties
-                                  Just prop -> Map.insert prop (trim outmsg) properties
-      streams = StepStreams (Just outmsg) (Just errmsg)
   unless (rc == ExitSuccess) $
-    zzLog @s Error (prettyCommand cmd ++ " failed: " ++ show rc)
+    zzLog @s Error (cmdString ++ " failed: " ++ show rc)
+  let properties' = properties & maybe id (`Map.insert` trim outmsg) mprop
+  let streams = StepStreams (Just outmsg) (Just errmsg)
   return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
- where
-  prettyCommand Command{cmdString} = cmdString
 runStep _ (Ext ext) = absurd ext
 
 runBuild
