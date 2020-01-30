@@ -108,22 +108,6 @@ putOutLn str = putOut @s (str ++ "\n")
 putErrLn :: forall s m . MonadExec s m => String -> m ()
 putErrLn str = putErr @s (str ++ "\n")
 
-inject
-  :: forall s m e a
-   . (Show e, MonadExec s m, MonadError ExitCode m)
-  => ExitCode
-  -> Validation (Set.Set e) a
-  -> m a
-inject code validation =
-  case validation of
-    Success res -> return res
-    Failure errors -> do
-      zzLog @s Error (buildErrorMsg errors)
-      throwError code
- where
-  buildErrorMsg :: forall e . Show e => Set.Set e -> String
-  buildErrorMsg errors = unlines $ map show $ Set.toList errors
-
 dynSubstDelimiters = ("«", "»")
 
 runSteps
@@ -137,8 +121,8 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
   let vstep' = substitute dynSubstDelimiters (Map.toList properties) step in
   case vstep' of
     Failure errors -> do
-      zzLog @s1 Error (buildErrorMsg errors) 
-      return $ BuildContext (withMaxStatus buildState Common.Failure) properties 
+      zzLog @s1 Error (buildErrorMsg errors)
+      return $ BuildContext (withMaxStatus buildState Common.Failure) properties
     Success step' -> do
       stepID <- startStep @s2 buildState step'
       -- We must call endStep now, no matter what happens. Could we handle that like a resource?
@@ -181,7 +165,7 @@ runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
         haltBuilds Common.Failure = True
         haltBuilds Common.Error = True
         normalize (propValue :: String) -- One usually doesn't want the trailing newline in build properties
-          | ("\n" :: String) `isSuffixOf` propValue = 
+          | ("\n" :: String) `isSuffixOf` propValue =
               take (length propValue - length ("\n" :: String)) propValue
           | otherwise = propValue
 runStep _ (Ext ext) = absurd ext
@@ -203,21 +187,19 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 
 data ProcessMode = PrintOnly | Execute
 
+buildErrorMsg :: Show e => Set.Set e -> String
+buildErrorMsg errors = unlines $ map show $ Set.toList errors
+
+errorToString :: Show e => Validation (Set.Set e) a -> Validation String a
+errorToString = first buildErrorMsg
+
 prepareConfig :: ProcessMode
               -> ProcessEnv -- ^ The system's environment
               -> String -- ^ The content of the XML file to process
               -> Validation String (Config Substituted) -- ^ An error message or tHe configuration to execute
-prepareConfig mode ProcessEnv{Exec.workdir, sysenv} xml =
-  -- It's a bit tartelette because we deal with two instances of validation:
-  -- XmlValidation and ConfigValidation
-  let xmlValidation :: XmlValidation (Config Normalized) = normalize workdir <$> parseXmlString xml
-      normalizedConfig :: Validation String (Config Normalized) = first buildErrorMsg xmlValidation
-      in case normalizedConfig of
-           Success cn -> first buildErrorMsg $ substAll sysenv cn
-           Failure err -> Failure err
-  where
-    buildErrorMsg :: forall e . Show e => Set.Set e -> String
-    buildErrorMsg errors = unlines $ map show $ Set.toList errors
+prepareConfig mode ProcessEnv { Exec.workdir, sysenv } xml =
+  errorToString (parseXmlString xml) `bindValidation` \config ->
+    errorToString (substAll sysenv (normalize workdir config))
 
 process
   :: forall s1 s2 m
