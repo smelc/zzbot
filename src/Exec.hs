@@ -69,7 +69,7 @@ data BuildContext = BuildContext
   , properties :: Map.Map String String -- ^ Build properties
   }
 
-data LogLevel = Info | Error
+data LogLevel = InfoLevel | ErrorLevel
   deriving (Eq, Show)
 
 class Monad m => MonadExec s m where
@@ -88,11 +88,11 @@ instance (Monad m, MonadIO m) => MonadExec UsingIOForExec m where
    where
     doc = "ZZ>" <+> pretty logEntry <> hardline
     handle
-      | Info <- logLevel = stdout
-      | Error <- logLevel = stderr
+      | InfoLevel <- logLevel = stdout
+      | ErrorLevel <- logLevel = stderr
     style
-      | Info <- logLevel = color Green
-      | Error <- logLevel = color Red
+      | InfoLevel <- logLevel = color Green
+      | ErrorLevel <- logLevel = color Red
 
   runShellCommand workdir Command{cmdString} =
     liftIO $ readCreateProcessWithExitCode createProcess ""
@@ -114,6 +114,12 @@ putOutLn str = putOut @s (str ++ "\n")
 putErrLn :: forall s m . MonadExec s m => String -> m ()
 putErrLn str = putErr @s (str ++ "\n")
 
+zzLogInfo :: forall s m . MonadExec s m => String -> m ()
+zzLogInfo = zzLog @s InfoLevel
+
+zzLogError :: forall s m . MonadExec s m => String -> m ()
+zzLogError = zzLog @s ErrorLevel
+
 dynSubstDelimiters = ("«", "»")
 
 runSteps
@@ -126,7 +132,7 @@ runSteps ctxt [] = return ctxt
 runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
   case substitute dynSubstDelimiters (Map.toList properties) step  of
     Failure errors -> do
-      zzLog @s1 Error (buildErrorMsg errors)
+      zzLogError @s1 (buildErrorMsg errors)
       return $ BuildContext (withMaxStatus buildState Common.Failure) properties
     Success step' -> do
       stepID <- startStep @s2 buildState step'
@@ -147,12 +153,12 @@ runStep properties (SetPropertyFromValue prop value) =
   return (properties', StepStreams Nothing Nothing, Common.Success, True)
   where properties' = Map.insert prop value properties
 runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure) = do
-  zzLog @s Info (cmdString ++ maybe "" (" → " ++) mprop)
+  zzLogInfo @s (cmdString ++ maybe "" (" → " ++) mprop)
   (rc, outmsg, errmsg) <- runShellCommand @s workdir cmd
   unless (null outmsg) $ putOut @s outmsg -- show step standard output, if any
   unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
   unless (rc == ExitSuccess) $
-    zzLog @s Error (cmdString ++ " failed: " ++ show rc)
+    zzLogError @s (cmdString ++ " failed: " ++ show rc)
   let properties' = properties & maybe id (`Map.insert` trim outmsg) mprop
   let streams = StepStreams (Just outmsg) (Just errmsg)
   return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
@@ -199,7 +205,7 @@ process
   -> m ()
 process mode env xml =
   case prepareConfig mode env xml of
-    Failure errMsg -> zzLog @s1 Error errMsg
+    Failure errMsg -> zzLogError @s1 errMsg
     Success substitutedConfig@Config{builders} ->
       case mode of
         PrintOnly -> putOutLn @s1 (renderAsXml substitutedConfig)

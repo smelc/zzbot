@@ -7,7 +7,7 @@
 
 module ExecSpec (spec) where
 
-import Common hiding (Error)
+import Common hiding (ErrorLevel)
 import Config
 import Control.Lens
 import Control.Monad.Except
@@ -185,18 +185,18 @@ spec =
       \</config>"
     expectedOutput =
       ( Left (ExitFailure 3)
-      , [ Message Info "ls a"
+      , [ Message InfoLevel "ls a"
         , StdOut "foo bar"
-        , Message Info "ls b"
+        , Message InfoLevel "ls bInfoLevel"
         , StdOut "bar baz"
-        , Message Info "ls b"
+        , Message InfoLevel "ls b"
         , StdOut "bar baz"
-        , Message Info "some junk 1"
+        , Message InfoLevel "some junk 1"
         , StdErr "command not found"
-        , Message Error "some junk 1 failed: ExitFailure 127"
-        , Message Info "some junk 2"
+        , Message ErrorLevel "some junk 1 failed: ExitFailure 127"
+        , Message InfoLevel "some junk 2"
         , StdErr "command not found"
-        , Message Error "some junk 2 failed: ExitFailure 127"
+        , Message ErrorLevel "some junk 2 failed: ExitFailure 127"
         ]
       )
     expectedTrace =
