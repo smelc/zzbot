@@ -187,11 +187,8 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 
 data ProcessMode = PrintOnly | Execute
 
-buildErrorMsg :: Show e => Set.Set e -> String
-buildErrorMsg errors = unlines $ map show $ Set.toList errors
-
 errorToString :: Show e => Validation (Set.Set e) a -> Validation String a
-errorToString = first buildErrorMsg
+errorToString = first (unlines . map show . Set.toList )
 
 prepareConfig :: ProcessMode
               -> ProcessEnv -- ^ The system's environment
