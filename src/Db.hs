@@ -11,7 +11,8 @@ module Db (
   startBuild,
   endBuild,
   startStep,
-  endStep
+  endStep,
+  withMaxStatus
 ) where
 
 import Control.Monad.Freer
@@ -22,10 +23,12 @@ import Common
 import Config
 import qualified LowLevelDb as Low
 
--- | The state of a build, as exposed to clients of this file
--- TODO smelc keep only the maximum of statuses gathered so far, no need to keep the list
--- This'll get rid of the snoc business whose complexity is bad
+-- | The build identifier and its status (so far)
 data BuildState = BuildState BuildID Status
+
+withMaxStatus :: BuildState -> Status -> BuildState
+withMaxStatus (BuildState buildID s1) s2 =
+   BuildState buildID (max s1 s2)
 
 data DbOperations :: Type -> Type where
    StartBuild :: String -> DbOperations BuildState -- ^ The string is the builder's name

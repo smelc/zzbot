@@ -23,9 +23,10 @@ import Control.Arrow (left)
 import Control.Monad
 import Control.Monad.Freer
 import Control.Monad.Freer.Error
+import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.Kind
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.Function
 import Data.List
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -35,7 +36,7 @@ import System.Exit
 import System.IO
 import System.Process
 
-import Common (StepStreams(StepStreams), toExitCode)
+import Common (StepStreams(StepStreams), toStatus)
 import Config
 import Db
 import Xml
@@ -45,24 +46,26 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified GHC.IO.Handle as Handle
 
-parsingErrorCode, substitutionErrorCode, subprocessErrorCode :: ExitCode
+parsingErrorCode, substitutionErrorCode, failureStatusErrorCode, errorStatusErrorCode :: ExitCode
 
+-- | Configuration cannot be parsed
 parsingErrorCode = ExitFailure 1
+-- | Application of static substitution failed
 substitutionErrorCode = ExitFailure 2
-subprocessErrorCode = ExitFailure 3
+-- | Build returned 'Common.Failure'
+failureStatusErrorCode = ExitFailure 3
+-- | Build returned 'Common.Error'
+errorStatusErrorCode = ExitFailure 4
 
 type Properties = Map.Map String String
 
--- The second element maps build variables to their values
+-- | The second element maps build variables to their values
 data BuildContext = BuildContext
-  { buildState :: BuildState
-  , properties :: Properties
+  { buildState :: BuildState -- ^ Build identifier and build status (so far)
+  , properties :: Properties -- ^ Build properties
   }
 
-withProperties :: BuildContext -> Map.Map String String -> BuildContext
-withProperties BuildContext{buildState} = BuildContext buildState
-
-data LogLevel = LogLevelInfo | LogLevelError
+data LogLevel = InfoLevel | ErrorLevel
   deriving (Eq, Show)
 
 data Exec :: Type -> Type where
@@ -101,11 +104,11 @@ execToIO (ZzLog logLevel logEntry) =
  where
   doc = "ZZ>" <+> pretty logEntry <> hardline
   handle
-    | LogLevelInfo <- logLevel = stdout
-    | LogLevelError <- logLevel = stderr
+    | InfoLevel <- logLevel = stdout
+    | ErrorLevel <- logLevel = stderr
   style
-    | LogLevelInfo <- logLevel = color Green
-    | LogLevelError <- logLevel = color Red
+    | InfoLevel <- logLevel = color Green
+    | ErrorLevel <- logLevel = color Red
 execToIO (RunShellCommand workdir Command{cmdString}) =
   sendM $ readCreateProcessWithExitCode createProcess ""
  where
@@ -125,21 +128,17 @@ putErrLn
   -> Eff effs ()
 putErrLn str = putErr (str ++ "\n")
 
-inject
-  :: Members '[Exec, Error ExitCode] effs
-  => Show e
-  => ExitCode
-  -> Validation (Set.Set e) a
-  -> Eff effs a
-inject code validation =
-  case validation of
-    Success res -> return res
-    Failure errors -> do
-      zzLog LogLevelError (buildErrorMsg errors)
-      throwError code
- where
-  buildErrorMsg :: forall e . Show e => Set.Set e -> String
-  buildErrorMsg errors = unlines $ map show $ Set.toList errors
+zzLogInfo
+  :: Member Exec effs
+  => String
+  -> Eff effs ()
+zzLogInfo = zzLog InfoLevel
+
+zzLogError
+  :: Member Exec effs
+  => String
+  -> Eff effs ()
+zzLogError = zzLog ErrorLevel
 
 dynSubstDelimiters = ("«", "»")
 
@@ -149,16 +148,19 @@ runSteps
   -> [Step Substituted]
   -> Eff effs BuildContext
 runSteps ctxt [] = return ctxt
-runSteps ctxt@BuildContext{buildState, properties} (step:steps) = do
-  step' <- inject
-             substitutionErrorCode
-             (substitute dynSubstDelimiters (Map.toList properties) step)
-  stepID <- startStep buildState step'
-  (properties', streams, status, continue) <-
-    runStep properties step'
-  buildState' <- endStep buildState stepID streams status
-  unless continue $ throwError subprocessErrorCode
-  runSteps (BuildContext buildState' properties') steps
+runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
+  case substitute dynSubstDelimiters (Map.toList properties) step  of
+    Failure errors -> do
+      zzLogError (buildErrorMsg errors)
+      return $ BuildContext (withMaxStatus buildState Common.Failure) properties
+    Success step' -> do
+      stepID <- startStep buildState step'
+      -- We must call endStep now, no matter what happens. Could we handle that like a resource?
+      (properties', streams, status, continue) <- runStep properties step'
+      buildState' <- endStep buildState stepID streams status
+      let ctxt' = BuildContext buildState' properties'
+      if continue then runSteps ctxt' steps
+      else return ctxt'
 
 runStep
   :: Member Exec effs
@@ -168,30 +170,19 @@ runStep
 runStep properties (SetPropertyFromValue prop value) =
   return (properties', StepStreams Nothing Nothing, Common.Success, True)
   where properties' = Map.insert prop value properties
-runStep properties (ShellCmd workdir cmd mprop haltOnFailure) = do
-  let infoSuffix :: String = case mprop of Nothing -> ""
-                                           Just prop -> " → " ++ prop
-  zzLog LogLevelInfo (prettyCommand cmd ++ infoSuffix)
+runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure) = do
+  zzLogInfo (cmdString ++ maybe "" (" → " ++) mprop)
   (rc, outmsg, errmsg) <- runShellCommand workdir cmd
-  unless (null outmsg) $ putOut outmsg -- show step normal output, if any
+  unless (null outmsg) $ putOut outmsg -- show step standard output, if any
   unless (null errmsg) $ putErr errmsg -- show step error output, if any
-  let properties' = case mprop of Nothing -> properties
-                                  Just prop -> Map.insert prop (normalize outmsg) properties
-      streams = StepStreams (Just outmsg) (Just errmsg)
-      status = toExitCode rc
   unless (rc == ExitSuccess) $
-    zzLog LogLevelError (prettyCommand cmd ++ " failed: " ++ show rc)
-  return (properties', streams, toExitCode rc, not haltOnFailure || not (haltBuilds status))
-  where prettyCommand Command{cmdString} = cmdString
-        haltBuilds Common.Success = False
-        haltBuilds Common.Warning = False
-        haltBuilds Common.Cancellation = True
-        haltBuilds Common.Failure = True
-        haltBuilds Common.Error = True
-        normalize (propValue :: String) -- One usually doesn't want the trailing newline in build properties
-          | ("\n" :: String) `isSuffixOf` propValue =
-              take (length propValue - length ("\n" :: String)) propValue
-          | otherwise = propValue
+    zzLogError (cmdString ++ " failed: " ++ show rc)
+  let properties' = properties & maybe id (`Map.insert` normalize outmsg) mprop
+  let streams = StepStreams (Just outmsg) (Just errmsg)
+  return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
+ where
+  normalize "" = ""
+  normalize str = if last str == '\n' then init str else str
 runStep _ (Ext ext) = absurd ext
 
 runBuild
@@ -210,17 +201,31 @@ data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
 
 data ProcessMode = PrintOnly | Execute
 
+
+buildErrorMsg :: Show e => Set.Set e -> String
+buildErrorMsg errors = unlines $ map show $ Set.toList errors
+
+errorToString :: Show e => Validation (Set.Set e) a -> Validation String a
+errorToString = first buildErrorMsg
+
+prepareConfig :: ProcessMode
+              -> ProcessEnv -- ^ The system's environment
+              -> String -- ^ The content of the XML file to process
+              -> Validation String (Config Substituted) -- ^ An error message or tHe configuration to execute
+prepareConfig mode ProcessEnv { Exec.workdir, sysenv } xml =
+  errorToString (parseXmlString xml) `bindValidation` \config ->
+    errorToString (substAll sysenv (normalize workdir config))
+
 process
   :: Members '[Exec, DbOperations, Error ExitCode] effs
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
   -> Eff effs ()
-process mode ProcessEnv{Exec.workdir, sysenv} xml = do
-  parsedConfig <- inject parsingErrorCode (parseXmlString xml)
-  let normalizedConfig = normalize workdir parsedConfig
-  substitutedConfig@Config{builders} <-
-    inject substitutionErrorCode (substAll sysenv normalizedConfig)
-  case mode of
-    PrintOnly -> putOutLn (renderAsXml substitutedConfig)
-    Execute -> traverse_ runBuild builders
+process mode env xml =
+  case prepareConfig mode env xml of
+    Failure errMsg -> zzLogError errMsg
+    Success substitutedConfig@Config{builders} ->
+      case mode of
+        PrintOnly -> putOutLn (renderAsXml substitutedConfig)
+        Execute -> traverse_ runBuild builders

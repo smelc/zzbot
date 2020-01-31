@@ -14,9 +14,9 @@ data Status =
 type BuildID = Int -- ^ The unique identifier of a build
 type StepID = Int -- ^ The unique identifier of a step
 
-toExitCode :: ExitCode -> Status
-toExitCode ExitSuccess = Success
-toExitCode _ = Failure
+toStatus :: ExitCode -> Status
+toStatus ExitSuccess = Success
+toStatus _ = Failure
 
 -- This type could be in LowLevelDb, but it would require clients of Db to import LowLevelDb
 -- which I would rather not to (solely Db should depend on LowLevelDb)
