@@ -48,6 +48,7 @@ executable zzbot
   build-depends:     base >=4.7 && <5,
                      containers,
                      directory,
+                     extra,
                      mtl,
                      optparse-applicative,
                      validation,

@@ -26,11 +26,11 @@ import Control.Applicative
 import Control.Arrow (left)
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.Except
 import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.Function
 import Data.List
+import Data.List.NonEmpty.Extra (maximum1)
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
@@ -153,12 +153,12 @@ runBuild
   :: forall s1 s2 m
    . (MonadExec s1 m, DbOperations s2 m)
   => Builder Substituted
-  -> m ()
+  -> m Common.Status
 runBuild (Builder () name steps) = do
   initialState <- startBuild @s2 name
   finalCtxt <- runSteps @s1 @s2 (BuildContext initialState Map.empty) steps
   endBuild @s2 (buildState finalCtxt)
-  return ()
+  return $ (\(BuildState _ status) -> status) (buildState finalCtxt)
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
@@ -187,11 +187,17 @@ process
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
-  -> m ()
+  -> m Common.Status
 process mode env xml =
   case prepareConfig mode env xml of
-    Failure errMsg -> zzLogError @s1 errMsg
+    Failure errMsg -> do
+      zzLogError @s1 errMsg
+      return Common.Failure 
     Success substitutedConfig@Config{builders} ->
       case mode of
-        PrintOnly -> putOutLn @s1 (renderAsXml substitutedConfig)
-        Execute -> traverse_ (runBuild @s1 @s2) builders
+        PrintOnly -> do
+          putOutLn @s1 (renderAsXml substitutedConfig)
+          return Common.Success 
+        Execute -> do
+          statuses <- traverse (runBuild @s1 @s2) builders
+          return $ maximum1 statuses

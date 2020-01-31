@@ -51,8 +51,8 @@ instance MonadExec () LoggingMockExec where
 
 instance DbOperations () LoggingMockExec where
    startBuild name = return (BuildState 0 Success)
-   startStep state desc = return 0 -- FIXME smelc
-   endStep state stepID streams status = return state -- FIXME smelc
+   startStep state desc = return 0 -- FIXME smelc, makes the tests fail!
+   endStep state stepID streams status = return state -- FIXME smelc, makes the tests fail!
    endBuild state = return Success
 
 -- Tracing mock exec
@@ -158,14 +158,13 @@ instance DbOperations () FakeDbMockExec where
 spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
-      runLoggingMockExec (runExceptT (process @() @() Execute env testXml))
+      runLoggingMockExec (process @() @() Execute env testXml)
         `shouldBe` expectedOutput
     it "should set the working directory as specified" $
-      runTracingMockExec (runExceptT (process @() @() Execute env testXml))
+      runTracingMockExec (process @() @() Execute env testXml)
         `shouldBe` expectedTrace
     it "should write the expected information in the DB" $
       (process @() @() Execute env testXml
-        & runExceptT
         & flip runFakeDbMockExec emptyFakeDb
         & snd -- we don't care for the return value, we just want the db
         & normalizeFakeDb)
@@ -184,10 +183,10 @@ spec =
       \  </builder>\
       \</config>"
     expectedOutput =
-      ( Left (ExitFailure 3)
+      ( Failure
       , [ Message InfoLevel "ls a"
         , StdOut "foo bar"
-        , Message InfoLevel "ls bInfoLevel"
+        , Message InfoLevel "ls b"
         , StdOut "bar baz"
         , Message InfoLevel "ls b"
         , StdOut "bar baz"
@@ -200,7 +199,7 @@ spec =
         ]
       )
     expectedTrace =
-      ( Left (ExitFailure 3)
+      ( Failure
       , [ Execution "/test/workdir/dir1" (Command "ls a")
         , Execution "/test/workdir/dir1/dir2" (Command "ls b")
         , Execution "/absolute/dir" (Command "ls b")
