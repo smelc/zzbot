@@ -6,7 +6,6 @@ module Main where
 
 import Config
 import Control.Applicative
-import Control.Monad.Except
 import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe
@@ -55,9 +54,9 @@ optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
 runConcreteStack
   :: Database
-  -> ReaderT Database (ExceptT ExitCode IO) a
-  -> IO (Either ExitCode a)
-runConcreteStack db = runExceptT . flip runReaderT db
+  -> ReaderT Database IO a
+  -> IO a
+runConcreteStack = flip runReaderT
 
 main :: IO ()
 main = do
@@ -66,12 +65,9 @@ main = do
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
   withDatabase optDatabasePath $ \db -> do
-    res <- runConcreteStack db $ traverse
+    statuses <- runConcreteStack db $ traverse
       (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) optProcessMode env) xmls
-    -- FIXME smelc The ExceptT typeclass is useless now since Exec.process doesn't use MonadError
-    case res of
-      Left code -> exitWith code
-      Right statuses -> exitWith $ toExitCode $ maximum statuses
+    exitWith $ toExitCode $ maximum statuses
 
 -- This function makes sense solely here, that's why it's not in Common.hs
 toExitCode :: Status -> ExitCode
