@@ -49,17 +49,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified GHC.IO.Handle as Handle
 
-parsingErrorCode, substitutionErrorCode, failureStatusErrorCode, errorStatusErrorCode :: ExitCode
-
--- | Configuration cannot be parsed
-parsingErrorCode = ExitFailure 1
--- | Application of static substitution failed
-substitutionErrorCode = ExitFailure 2
--- | Build returned 'Common.Failure'
-failureStatusErrorCode = ExitFailure 3
--- | Build returned 'Common.Error'
-errorStatusErrorCode = ExitFailure 4
-
 type Properties = Map.Map String String
 
 -- | The second element maps build variables to their values
@@ -100,12 +89,6 @@ instance (Monad m, MonadIO m) => MonadExec UsingIOForExec m where
 
   putOut = liftIO . putStr
   putErr = liftIO . hPutStr stderr
-
-instance forall e s m . MonadExec s m => MonadExec s (ExceptT e m) where
-  zzLog textColor logEntry = lift (zzLog @s textColor logEntry)
-  runShellCommand workdir command = lift (runShellCommand @s workdir command)
-  putOut   str = lift (putOut @s str)
-  putErr   str = lift (putErr @s str)
 
 putOutLn :: forall s m . MonadExec s m => String -> m ()
 putOutLn str = putOut @s (str ++ "\n")
