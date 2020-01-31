@@ -206,7 +206,7 @@ spec =
       ( Left (ExitFailure 3)
       , [ Message InfoLevel "ls a"
         , StdOut "foo bar"
-        , Message InfoLevel "ls bInfoLevel"
+        , Message InfoLevel "ls b"
         , StdOut "bar baz"
         , Message InfoLevel "ls b"
         , StdOut "bar baz"
