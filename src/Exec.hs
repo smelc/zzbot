@@ -30,7 +30,6 @@ import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.Function
 import Data.List
-import Data.List.NonEmpty.Extra (maximum1)
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
@@ -192,12 +191,12 @@ process mode env xml =
   case prepareConfig mode env xml of
     Failure errMsg -> do
       zzLogError @s1 errMsg
-      return Common.Failure 
+      return Common.Failure
     Success substitutedConfig@Config{builders} ->
       case mode of
         PrintOnly -> do
           putOutLn @s1 (renderAsXml substitutedConfig)
-          return Common.Success 
+          return Common.Success
         Execute -> do
           statuses <- traverse (runBuild @s1 @s2) builders
-          return $ maximum1 statuses
+          return $ maximum statuses

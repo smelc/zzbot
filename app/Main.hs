@@ -9,7 +9,6 @@ import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty)
-import Data.List.NonEmpty.Extra (maximum1)
 import Data.Maybe
 import Data.Validation
 import System.Directory
@@ -72,12 +71,12 @@ main = do
     -- FIXME smelc The ExceptT typeclass is useless now since Exec.process doesn't use MonadError
     case res of
       Left code -> exitWith code
-      Right statuses -> exitWith $ toExitCode $ maximum1 statuses
+      Right statuses -> exitWith $ toExitCode $ maximum statuses
 
 -- This function makes sense solely here, that's why it's not in Common.hs
 toExitCode :: Status -> ExitCode
-toExitCode Common.Success = ExitSuccess 
-toExitCode Common.Warning = ExitSuccess 
-toExitCode Common.Cancellation = ExitSuccess 
+toExitCode Common.Success = ExitSuccess
+toExitCode Common.Warning = ExitSuccess
+toExitCode Common.Cancellation = ExitSuccess
 toExitCode Common.Failure = ExitFailure 1
 toExitCode Common.Error = ExitFailure 2
