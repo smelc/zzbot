@@ -51,8 +51,8 @@ instance MonadExec () LoggingMockExec where
 
 instance DbOperations () LoggingMockExec where
    startBuild name = return (BuildState 0 Success)
-   startStep state desc = return 0 -- FIXME smelc, makes the tests fail!
-   endStep state stepID streams status = return state -- FIXME smelc, makes the tests fail!
+   startStep state desc = return 0
+   endStep state stepID streams status = return (withMaxStatus state status)
    endBuild state = return Success
 
 -- Tracing mock exec
@@ -77,7 +77,7 @@ instance MonadExec () TracingMockExec where
 instance DbOperations () TracingMockExec where
    startBuild name = return (BuildState 0 Success)
    startStep state desc = return 0
-   endStep state stepID streams status = return state
+   endStep state stepID streams status = return (withMaxStatus state status)
    endBuild state = return Success
 
 -- FakeDb mock exec
