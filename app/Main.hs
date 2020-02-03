@@ -8,6 +8,7 @@ import Config
 import Control.Applicative
 import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty.Extra (maximum1)
 import Data.Maybe
 import Data.Validation
 import System.Directory
@@ -67,7 +68,7 @@ main = do
   withDatabase optDatabasePath $ \db -> do
     statuses <- runConcreteStack db $ traverse
       (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) optProcessMode env) xmls
-    exitWith $ toExitCode $ maximum statuses
+    exitWith $ toExitCode $ maximum1 statuses
 
 -- This function makes sense solely here, that's why it's not in Common.hs
 toExitCode :: Status -> ExitCode

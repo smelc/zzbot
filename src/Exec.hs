@@ -30,6 +30,7 @@ import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.Function
 import Data.List
+import Data.List.NonEmpty.Extra (maximum1)
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Data.Validation
@@ -199,4 +200,4 @@ process mode env xml =
           return Common.Success
         Execute -> do
           statuses <- traverse (runBuild @s1 @s2) builders
-          return $ maximum statuses
+          return $ maximum1 statuses
