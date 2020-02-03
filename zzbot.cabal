@@ -29,8 +29,8 @@ library
                      bytestring,
                      concurrent-extra,
                      containers,
+                     eff,
                      either,
-                     freer-simple,
                      filepath,
                      megaparsec,
                      prettyprinter,
@@ -50,7 +50,7 @@ executable zzbot
   build-depends:     base >=4.7 && <5,
                      containers,
                      directory,
-                     freer-simple,
+                     eff,
                      optparse-applicative,
                      validation,
                      zzbot
@@ -68,7 +68,7 @@ test-suite spec
   hs-source-dirs:    test
   build-depends:     base >= 4.7 && < 5,
                      containers,
-                     freer-simple,
+                     eff,
                      hspec,
                      lens,
                      prettyprinter-ansi-terminal,

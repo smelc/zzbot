@@ -5,9 +5,7 @@
 module Main where
 
 import Control.Applicative
-import Control.Monad.Freer
-import Control.Monad.Freer.Error
-import Control.Monad.Freer.Reader
+import Control.Effect
 import Data.List.NonEmpty (NonEmpty)
 import Data.Function
 import System.Directory
@@ -51,17 +49,11 @@ optionsParser =
 optionsParserInfo :: Opt.ParserInfo Options
 optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
-runConcreteStack
-  :: Database
-  -> Eff '[Exec, DbOperations, Reader Database, IO] a
-  -> IO a
 runConcreteStack db action =
   action
-    & runExecWithIO
+    & runMonadExecWithIO
     & interpretDbOpsAsLowLevelDbOps
-    & runLowLevelDbOpsWithSQLite
-    & runReader db
-    & runM
+    & runLowLevelDbOpsWithSQLite db
 
 main :: IO ()
 main = do

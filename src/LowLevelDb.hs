@@ -4,21 +4,22 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module LowLevelDb (
   Database(),
   LowLevelDbOperations(..),
-  startBuild,
-  endBuild,
-  startStep,
-  endStep,
+  LowLevelDbOperationsIOT,
   runLowLevelDbOpsWithSQLite,
   withDatabase
 ) where
 
-import Control.Monad.Freer
-import Control.Monad.Freer.Reader
+import Control.Effect
+import Control.Effect.Reader
+import Control.Monad.IO.Class
 import Database.SQLite.Simple
 import Data.Maybe
 import Data.Kind
@@ -36,27 +37,25 @@ import qualified Data.Text as Text
 -- for the moment
 
 -- | The database's structure is documented at the repo's root DEV.md file
-data LowLevelDbOperations :: Type -> Type where
-  StartBuild :: String -> LowLevelDbOperations BuildID
-  EndBuild :: BuildID -> Status -> LowLevelDbOperations ()
-  StartStep :: BuildID -> LBS.ByteString -> LowLevelDbOperations StepID
-  EndStep :: StepID -> StepStreams -> Status -> LowLevelDbOperations ()
+class Monad m => LowLevelDbOperations m where
+  -- | Records start of build with given name, returns the new build's unique identifier
+  startBuild :: String -> m BuildID
+  -- | End a build: records the end time and the status
+  endBuild :: BuildID -> Status -> m ()
+  -- | Records the start of a step, requires its description, returns its unique identifier
+  startStep :: BuildID -> LBS.ByteString -> m StepID
+  -- | Records the end of a step, requires its identifier, streams outputs, and its status
+  endStep :: StepID -> StepStreams -> Status -> m ()
 
--- | Records start of build with given name, returns the new build's unique identifier
-startBuild :: Member LowLevelDbOperations effs => String -> Eff effs BuildID
-startBuild name = send (StartBuild name)
+instance (Monad (t m), Send LowLevelDbOperations t m) => LowLevelDbOperations (EffT t m) where
+  startBuild name = send @LowLevelDbOperations (startBuild name)
+  endBuild buildId status = send @LowLevelDbOperations (endBuild buildId status)
+  startStep buildId desc = send @LowLevelDbOperations (startStep buildId desc)
+  endStep stepId streams status = send @LowLevelDbOperations (endStep stepId streams status)
 
--- | End a build: records the end time and the status
-endBuild :: Member LowLevelDbOperations effs => BuildID -> Status -> Eff effs ()
-endBuild buildId status = send (EndBuild buildId status)
-
--- | Records the start of a step, requires its description, returns its unique identifier
-startStep :: Member LowLevelDbOperations effs => BuildID -> LBS.ByteString -> Eff effs StepID
-startStep buildId desc = send (StartStep buildId desc)
-
--- | Records the end of a step, requires its identifier, streams outputs, and its status
-endStep :: Member LowLevelDbOperations effs => StepID -> StepStreams -> Status -> Eff effs ()
-endStep stepId streams status = send (EndStep stepId streams status)
+data LowLevelDbOperationsIO
+type LowLevelDbOperationsIOT = HandlerT LowLevelDbOperationsIO '[ReaderT Database]
+type instance Handles LowLevelDbOperationsIOT eff = eff == LowLevelDbOperations
 
 data Database = Database RWL.RWLock Connection
 
@@ -92,87 +91,88 @@ withDatabase filepath action =
     \  )"
 
 withReadConnection
-  :: Member (Reader Database) effs
-  => LastMember IO effs
+  :: Reader Database m
+  => MonadIO m
   => (Connection -> IO a)
-  -> Eff effs a
+  -> m a
 withReadConnection action = do
   Database lock conn <- ask
-  sendM (RWL.withRead lock (action conn))
+  liftIO (RWL.withRead lock (action conn))
 
 withWriteConnection
-  :: Member (Reader Database) effs
-  => LastMember IO effs
+  :: Reader Database m
+  => MonadIO m
   => (Connection -> IO a)
-  -> Eff effs a
+  -> m a
 withWriteConnection action = do
   Database lock conn <- ask
-  sendM (RWL.withWrite lock (action conn))
+  liftIO (RWL.withWrite lock (action conn))
 
 runLowLevelDbOpsWithSQLite
-  :: Member (Reader Database) effs
-  => LastMember IO effs
-  => Eff (LowLevelDbOperations ': effs)
-  ~> Eff effs
-runLowLevelDbOpsWithSQLite = interpret dbToIO
+  :: MonadIO m
+  => Database
+  -> EffT LowLevelDbOperationsIOT m a
+  -> m a
+runLowLevelDbOpsWithSQLite db = runReader db . runHandlerT . runEffT
 
-dbToIO
-  :: Member (Reader Database) effs
-  => LastMember IO effs
-  => LowLevelDbOperations
-  ~> Eff effs
-dbToIO (StartBuild builderName) =
-  withWriteConnection $ \conn -> do
-    executeNamed conn query args
-    fromIntegral <$> lastInsertRowId conn
-   where
-    query =
-      "INSERT\
-      \  INTO build (builder, start)\
-      \  VALUES (:builder, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
-    args =
-      [ ":builder" := builderName ]
-dbToIO (StartStep buildID desc) =
-  withWriteConnection $ \conn -> do
-    executeNamed conn query args
-    fromIntegral <$> lastInsertRowId conn
- where
-  query :: Query =
-    "INSERT\
-    \  INTO step (build_id, description, start)\
-    \  VALUES (:build_id, :description, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
-  args =
-    [ ":build_id" := buildID
-    , ":description" := desc
-    ]
-dbToIO (EndStep stepID streams status) =
-  withWriteConnection $ \conn ->
-    executeNamed conn query args
- where
-  query :: Query =
-    "UPDATE step SET\
-    \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
-    \  stdout = :stdout, \
-    \  stderr = :stderr, \
-    \  status = :status \
-    \WHERE id = :id"
-  args =
-    [ ":stdout" := streamToValue (stdout streams)
-    , ":stderr" := streamToValue (stderr streams)
-    , ":status" := show status
-    , ":id" := stepID
-    ]
-  streamToValue = fromMaybe "NULL"
-dbToIO (EndBuild buildID status) =
-  withWriteConnection $ \conn ->
-    executeNamed conn query args
- where
-  query =
-    "UPDATE build SET\
-    \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
-    \  status = :status \
-    \WHERE id = :id"
-  args =
-    [ ":status" := show status
-    , ":id" := buildID
-    ]
+instance MonadIO m => LowLevelDbOperations (LowLevelDbOperationsIOT m) where
+    startBuild builderName = HandlerT $
+      withWriteConnection $ \conn -> do
+        executeNamed conn query args
+        fromIntegral <$> lastInsertRowId conn
+     where
+      query =
+        "INSERT\
+        \  INTO build (builder, start)\
+        \  VALUES (:builder, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
+      args =
+        [ ":builder" := builderName ]
+
+    startStep buildID desc = HandlerT $
+      withWriteConnection $ \conn -> do
+        executeNamed conn query args
+        fromIntegral <$> lastInsertRowId conn
+     where
+      query :: Query =
+        "INSERT\
+        \  INTO step (build_id, description, start)\
+        \  VALUES (:build_id, :description, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))"
+      args =
+        [ ":build_id" := buildID
+        , ":description" := desc
+        ]
+
+    endStep stepID streams status = HandlerT $
+      withWriteConnection $ \conn ->
+        executeNamed conn query args
+     where
+      query :: Query =
+        "UPDATE step SET\
+        \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
+        \  stdout = :stdout, \
+        \  stderr = :stderr, \
+        \  status = :status \
+        \WHERE id = :id"
+      args =
+        [ ":stdout" := streamToValue (stdout streams)
+        , ":stderr" := streamToValue (stderr streams)
+        , ":status" := show status
+        , ":id" := stepID
+        ]
+      streamToValue = fromMaybe "NULL"
+
+    endBuild buildID status = HandlerT $
+      withWriteConnection $ \conn ->
+        executeNamed conn query args
+     where
+      query =
+        "UPDATE build SET\
+        \  end = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'),\
+        \  status = :status \
+        \WHERE id = :id"
+      args =
+        [ ":status" := show status
+        , ":id" := buildID
+        ]
+
+
