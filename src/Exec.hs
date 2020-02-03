@@ -46,17 +46,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified GHC.IO.Handle as Handle
 
-parsingErrorCode, substitutionErrorCode, failureStatusErrorCode, errorStatusErrorCode :: ExitCode
-
--- | Configuration cannot be parsed
-parsingErrorCode = ExitFailure 1
--- | Application of static substitution failed
-substitutionErrorCode = ExitFailure 2
--- | Build returned 'Common.Failure'
-failureStatusErrorCode = ExitFailure 3
--- | Build returned 'Common.Error'
-errorStatusErrorCode = ExitFailure 4
-
 type Properties = Map.Map String String
 
 -- | The second element maps build variables to their values
@@ -143,7 +132,7 @@ zzLogError = zzLog ErrorLevel
 dynSubstDelimiters = ("«", "»")
 
 runSteps
-  :: Members '[Exec, DbOperations, Error ExitCode] effs
+  :: Members '[Exec, DbOperations] effs
   => BuildContext
   -> [Step Substituted]
   -> Eff effs BuildContext
@@ -186,14 +175,14 @@ runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure)
 runStep _ (Ext ext) = absurd ext
 
 runBuild
-  :: Members '[Exec, DbOperations, Error ExitCode] effs
+  :: Members '[Exec, DbOperations] effs
   => Builder Substituted
-  -> Eff effs ()
+  -> Eff effs Common.Status
 runBuild (Builder () name steps) = do
   initialState <- startBuild name
   finalCtxt <- runSteps (BuildContext initialState Map.empty) steps
   endBuild (buildState finalCtxt)
-  return ()
+  return $ (\(BuildState _ status) -> status) (buildState finalCtxt)
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
@@ -217,15 +206,21 @@ prepareConfig mode ProcessEnv { Exec.workdir, sysenv } xml =
     errorToString (substAll sysenv (normalize workdir config))
 
 process
-  :: Members '[Exec, DbOperations, Error ExitCode] effs
+  :: Members '[Exec, DbOperations] effs
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
-  -> Eff effs ()
+  -> Eff effs Common.Status
 process mode env xml =
   case prepareConfig mode env xml of
-    Failure errMsg -> zzLogError errMsg
+    Failure errMsg -> do
+      zzLogError errMsg
+      return Common.Failure
     Success substitutedConfig@Config{builders} ->
       case mode of
-        PrintOnly -> putOutLn (renderAsXml substitutedConfig)
-        Execute -> traverse_ runBuild builders
+        PrintOnly -> do
+          putOutLn (renderAsXml substitutedConfig)
+          return Common.Success
+        Execute -> do
+          statuses <- traverse runBuild builders
+          return $ maximum statuses

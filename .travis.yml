@@ -42,15 +42,3 @@ script:
 - curl -sSL https://raw.github.com/ndmitchell/neil/master/misc/travis.sh | sh -s -- hlint .
 # Generate documentation from sources
 - stack exec haddock -- --html $(find src -name \*.hs) -o html
-# Test --print on versioned configs
-- stack exec zzbot -- --print configs/config.xml
-- stack exec zzbot -- --print configs/examples/kcg.xml
-# Test valid executions
-- stack exec zzbot -- configs/config.xml
-- stack exec zzbot -- configs/tests/haltOnFailure2.xml
-- stack exec zzbot -- configs/tests/haltOnFailure3.xml
-# Test invalid executions
-- if stack exec zzbot -- configs/tests/haltOnFailure1.xml; then >&2 echo "Call to zzbot should fail, but it succeeded"; exit 1; fi
-# Run some tests configs
-- stack exec zzbot -- configs/tests/db1.xml
-- stack exec zzbot -- configs/tests/db_nonull.xml

@@ -87,7 +87,7 @@ runStubDbOps
 runStubDbOps = interpret $ \case
    StartBuild name -> return (BuildState 0 Success)
    StartStep state desc -> return 0
-   EndStep state stepID streams status -> return state
+   EndStep state stepID streams status -> return (withMaxStatus state status)
    EndBuild state -> return Success
 
 -- FakeDb mock exec
@@ -168,21 +168,18 @@ spec =
   describe "runBuild" $ do
     it "should log what it's doing" $
       (process Execute env testXml
-         & runError
          & runExecAsDisplayLog
          & runStubDbOps
          & run)
       `shouldBe` expectedOutput
     it "should set the working directory as specified" $
       (process Execute env testXml
-         & runError
          & runExecAsExecutionLog
          & runStubDbOps
          & run)
       `shouldBe` expectedTrace
     it "should write the expected information in the DB" $
       (process Execute env testXml
-         & runError @ExitCode
          & runStubExec
          & runDbOpsWithFakeDb emptyFakeDb
          & run
@@ -203,7 +200,7 @@ spec =
       \  </builder>\
       \</config>"
     expectedOutput =
-      ( Left (ExitFailure 3)
+      ( Failure
       , [ Message InfoLevel "ls a"
         , StdOut "foo bar"
         , Message InfoLevel "ls b"
@@ -219,7 +216,7 @@ spec =
         ]
       )
     expectedTrace =
-      ( Left (ExitFailure 3)
+      ( Failure
       , [ Execution "/test/workdir/dir1" (Command "ls a")
         , Execution "/test/workdir/dir1/dir2" (Command "ls b")
         , Execution "/absolute/dir" (Command "ls b")

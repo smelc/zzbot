@@ -13,4 +13,5 @@ doc/build/index.html
 stack.yaml.lock
 
 # vim
+*.swo
 *.swp
