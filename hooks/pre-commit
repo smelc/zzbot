@@ -53,27 +53,3 @@ stack build || exit $?
 stack exec hlint . || exit $?
 # Generate documentation from sources
 stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?
-
-echo "Testing --print"
-# Check that zzbot --print succeeds on some configurations:
-for CONFIG in config.xml examples/kcg.xml
-do
-  run stack exec zzbot -- --print configs/$CONFIG || exit $?
-done
-
-# Check that zzbot fails on some configurations:
-echo "Testing executing failing configurations"
-FAILURE_CONFIGS="tests/haltOnFailure1.xml"
-for CONFIG in $FAILURE_CONFIGS
-do
-  run stack exec zzbot -- configs/$CONFIG
-  [[ "$?" != "0" ]] || exit $?
-done
-
-# Check that zzbot succeeds on some configurations:
-echo "Testing executing successful configurations"
-SUCCESS_CONFIGS="config.xml tests/db1.xml tests/db_nonull.xml tests/haltOnFailure2.xml tests/haltOnFailure3.xml"
-for CONFIG in $SUCCESS_CONFIGS
-do
-  run stack exec zzbot -- configs/$CONFIG || exit $?
-done
