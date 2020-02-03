@@ -1,15 +1,18 @@
+cabal-version:       2.4
 name:                zzbot
 version:             0.1.0.0
--- synopsis:
--- description:
 homepage:            https://github.com/githubuser/zzbot#readme
 license:             Apache-2.0
 license-file:        LICENSE
 author:              The zzbot authors
 category:            Tools
 build-type:          Simple
-cabal-version:       >=1.10
 extra-source-files:  README.md
+-- FIXME: these files are only required by tests but data-files will include
+-- them in the executable as well. See https://stackoverflow.com/q/51225261.
+data-files:          configs/*.xml,
+                     configs/tests/*.xml,
+                     configs/examples/*.xml
 
 library
   exposed-modules:   Common,
@@ -59,7 +62,10 @@ test-suite spec
   main-is:           Tests.hs
   other-modules:     ConfigSpec,
                      ExecSpec,
-                     XmlSpec
+                     XmlSpec,
+                     ZZBotSpec,
+                     Paths_zzbot
+  autogen-modules:   Paths_zzbot
   default-language:  Haskell2010
   hs-source-dirs:    test
   build-depends:     base >= 4.7 && < 5,
@@ -68,6 +74,8 @@ test-suite spec
                      lens,
                      mtl,
                      prettyprinter-ansi-terminal,
+                     process,
                      QuickCheck,
                      validation,
                      zzbot
+  build-tool-depends: zzbot:zzbot
