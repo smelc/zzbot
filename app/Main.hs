@@ -5,16 +5,14 @@
 module Main where
 
 import Control.Applicative
-import Control.Monad.Freer
-import Control.Monad.Freer.Error
-import Control.Monad.Freer.Reader
+import Control.Effect
 import Data.List.NonEmpty (NonEmpty)
 import Data.Function
 import System.Directory
 import System.Environment
 import System.Exit
 
-import Config
+import Common
 import Db
 import Exec
 import LowLevelDb
@@ -51,18 +49,11 @@ optionsParser =
 optionsParserInfo :: Opt.ParserInfo Options
 optionsParserInfo = Opt.info (optionsParser <**> Opt.helper) Opt.fullDesc
 
-runConcreteStack
-  :: Database
-  -> Eff '[Exec, DbOperations, Reader Database, Error ExitCode, IO] a
-  -> IO (Either ExitCode a)
 runConcreteStack db action =
   action
-    & runExecWithIO
+    & runMonadExecWithIO
     & interpretDbOpsAsLowLevelDbOps
-    & runLowLevelDbOpsWithSQLite
-    & runReader db
-    & runError
-    & runM
+    & runLowLevelDbOpsWithSQLite db
 
 main :: IO ()
 main = do
@@ -71,7 +62,13 @@ main = do
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
   withDatabase optDatabasePath $ \db -> do
-    res <- runConcreteStack db $ traverse (process optProcessMode env) xmls
-    case res of
-      Left code -> exitWith code
-      _ -> return ()
+    statuses <- runConcreteStack db $ traverse (process optProcessMode env) xmls
+    exitWith $ toExitCode $ maximum statuses
+
+-- This function makes sense solely here, that's why it's not in Common.hs
+toExitCode :: Status -> ExitCode
+toExitCode Common.Success = ExitSuccess
+toExitCode Common.Warning = ExitSuccess
+toExitCode Common.Cancellation = ExitSuccess
+toExitCode Common.Failure = ExitFailure 1
+toExitCode Common.Error = ExitFailure 2

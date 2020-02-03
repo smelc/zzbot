@@ -40,6 +40,10 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 extra-deps:
 - strings-1.1
+- github: hasura/eff
+  commit: 61dfb24515b3d6f54f2ca148655bd7c6b7e8181c
+  subdirs:
+    - eff
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

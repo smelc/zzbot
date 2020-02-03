@@ -2,27 +2,31 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- File to execute a build specified as a Builder
 module Exec
   ( ProcessEnv(..)
-  , Exec(..)
+  , MonadExec(..)
+  , MonadExecIOT
   , LogLevel(..)
   , ProcessMode(..)
-  , runExecWithIO
+  , runMonadExecWithIO
   , runBuild
   , process
    ) where
 
 import Control.Applicative
 import Control.Arrow (left)
+import Control.Effect
 import Control.Monad
-import Control.Monad.Freer
-import Control.Monad.Freer.Error
+import Control.Monad.IO.Class
 import Data.Bifunctor
 import Data.Foldable (traverse_)
 import Data.Kind
@@ -46,17 +50,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified GHC.IO.Handle as Handle
 
-parsingErrorCode, substitutionErrorCode, failureStatusErrorCode, errorStatusErrorCode :: ExitCode
-
--- | Configuration cannot be parsed
-parsingErrorCode = ExitFailure 1
--- | Application of static substitution failed
-substitutionErrorCode = ExitFailure 2
--- | Build returned 'Common.Failure'
-failureStatusErrorCode = ExitFailure 3
--- | Build returned 'Common.Error'
-errorStatusErrorCode = ExitFailure 4
-
 type Properties = Map.Map String String
 
 -- | The second element maps build variables to their values
@@ -68,85 +61,69 @@ data BuildContext = BuildContext
 data LogLevel = InfoLevel | ErrorLevel
   deriving (Eq, Show)
 
-data Exec :: Type -> Type where
-  ZzLog :: LogLevel -> String -> Exec ()
-  RunShellCommand
+class Monad m => MonadExec m where
+  zzLog :: LogLevel -> String -> m ()
+  runShellCommand
     :: String                       -- ^ The working directory
     -> Command                      -- ^ The command to execute
-    -> Exec (ExitCode, String, String) -- ^ return code, stdout, stderr
-  PutOut :: String -> Exec ()
-  PutErr :: String -> Exec ()
+    -> m (ExitCode, String, String) -- ^ return code, stdout, stderr
+  putOut   :: String -> m ()
+  putErr   :: String -> m ()
 
-zzLog :: Member Exec effs => LogLevel -> String -> Eff effs ()
-zzLog logLevel logEntry = send (ZzLog logLevel logEntry)
+instance (Monad (t m), Send MonadExec t m) => MonadExec (EffT t m) where
+  zzLog logLevel logEntry = send @MonadExec (zzLog logLevel logEntry)
+  runShellCommand workDir command = send @MonadExec (runShellCommand workDir command)
+  putOut str = send @MonadExec (putOut str)
+  putErr str = send @MonadExec (putErr str)
 
-runShellCommand :: Member Exec effs => String -> Command -> Eff effs (ExitCode, String, String)
-runShellCommand workDir command = send (RunShellCommand workDir command)
+data MonadExecIO
+type MonadExecIOT = HandlerT MonadExecIO '[]
+type instance Handles MonadExecIOT eff = eff == MonadExec
 
-putOut :: Member Exec effs => String -> Eff effs ()
-putOut str = send (PutOut str)
+runMonadExecWithIO
+  :: EffT MonadExecIOT m a
+  -> m a
+runMonadExecWithIO = runHandlerT . runEffT
 
-putErr :: Member Exec effs => String -> Eff effs ()
-putErr str = send (PutErr str)
+instance MonadIO m => MonadExec (MonadExecIOT m) where
+  zzLog logLevel logEntry = liftIO $ hPutDoc handle (annotate style doc)
+   where
+    doc = "ZZ>" <+> pretty logEntry <> hardline
+    handle
+      | InfoLevel <- logLevel = stdout
+      | ErrorLevel <- logLevel = stderr
+    style
+      | InfoLevel <- logLevel = color Green
+      | ErrorLevel <- logLevel = color Red
 
-runExecWithIO
-  :: LastMember IO effs
-  => Eff (Exec ': effs)
-  ~> Eff effs
-runExecWithIO = interpret execToIO
+  runShellCommand workdir Command{cmdString} =
+    liftIO $ readCreateProcessWithExitCode createProcess ""
+   where
+    createProcess = (shell cmdString) { cwd = Just workdir }
 
-execToIO
-  :: LastMember IO effs
-  => Exec
-  ~> Eff effs
-execToIO (ZzLog logLevel logEntry) =
-  sendM $ hPutDoc handle (annotate style doc)
- where
-  doc = "ZZ>" <+> pretty logEntry <> hardline
-  handle
-    | InfoLevel <- logLevel = stdout
-    | ErrorLevel <- logLevel = stderr
-  style
-    | InfoLevel <- logLevel = color Green
-    | ErrorLevel <- logLevel = color Red
-execToIO (RunShellCommand workdir Command{cmdString}) =
-  sendM $ readCreateProcessWithExitCode createProcess ""
- where
-  createProcess = (shell cmdString) { cwd = Just workdir }
-execToIO (PutOut str) = sendM (putStr str)
-execToIO (PutErr str) = sendM (hPutStr stderr str)
+  putOut = liftIO . putStr
+  putErr = liftIO . hPutStr stderr
 
-putOutLn
-  :: Member Exec effs
-  => String
-  -> Eff effs ()
+putOutLn :: MonadExec m => String -> m ()
 putOutLn str = putOut (str ++ "\n")
 
-putErrLn
-  :: Member Exec effs
-  => String
-  -> Eff effs ()
+putErrLn :: MonadExec m => String -> m ()
 putErrLn str = putErr (str ++ "\n")
 
-zzLogInfo
-  :: Member Exec effs
-  => String
-  -> Eff effs ()
+zzLogInfo :: MonadExec m => String -> m ()
 zzLogInfo = zzLog InfoLevel
 
-zzLogError
-  :: Member Exec effs
-  => String
-  -> Eff effs ()
+zzLogError :: MonadExec m => String -> m ()
 zzLogError = zzLog ErrorLevel
 
 dynSubstDelimiters = ("«", "»")
 
 runSteps
-  :: Members '[Exec, DbOperations, Error ExitCode] effs
+  :: MonadExec m
+  => DbOperations m
   => BuildContext
   -> [Step Substituted]
-  -> Eff effs BuildContext
+  -> m BuildContext
 runSteps ctxt [] = return ctxt
 runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
   case substitute dynSubstDelimiters (Map.toList properties) step  of
@@ -163,10 +140,10 @@ runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
       else return ctxt'
 
 runStep
-  :: Member Exec effs
+  :: MonadExec m
   => Properties
   -> Step Substituted -- ^ The step to execute
-  -> Eff effs (Properties, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
+  -> m (Properties, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
 runStep properties (SetPropertyFromValue prop value) =
   return (properties', StepStreams Nothing Nothing, Common.Success, True)
   where properties' = Map.insert prop value properties
@@ -186,21 +163,21 @@ runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure)
 runStep _ (Ext ext) = absurd ext
 
 runBuild
-  :: Members '[Exec, DbOperations, Error ExitCode] effs
+  :: MonadExec m
+  => DbOperations m
   => Builder Substituted
-  -> Eff effs ()
+  -> m Common.Status
 runBuild (Builder () name steps) = do
   initialState <- startBuild name
   finalCtxt <- runSteps (BuildContext initialState Map.empty) steps
   endBuild (buildState finalCtxt)
-  return ()
+  return $ (\(BuildState _ status) -> status) (buildState finalCtxt)
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
                              }
 
 data ProcessMode = PrintOnly | Execute
-
 
 buildErrorMsg :: Show e => Set.Set e -> String
 buildErrorMsg errors = unlines $ map show $ Set.toList errors
@@ -217,15 +194,22 @@ prepareConfig mode ProcessEnv { Exec.workdir, sysenv } xml =
     errorToString (substAll sysenv (normalize workdir config))
 
 process
-  :: Members '[Exec, DbOperations, Error ExitCode] effs
+  :: MonadExec m
+  => DbOperations m
   => ProcessMode -- ^ Whether to print or execute the builder
   -> ProcessEnv -- ^ The system's environment
   -> String -- ^ The content of the XML file to process
-  -> Eff effs ()
+  -> m Common.Status
 process mode env xml =
   case prepareConfig mode env xml of
-    Failure errMsg -> zzLogError errMsg
+    Failure errMsg -> do
+      zzLogError errMsg
+      return Common.Failure
     Success substitutedConfig@Config{builders} ->
       case mode of
-        PrintOnly -> putOutLn (renderAsXml substitutedConfig)
-        Execute -> traverse_ runBuild builders
+        PrintOnly -> do
+          putOutLn (renderAsXml substitutedConfig)
+          return Common.Success
+        Execute -> do
+          statuses <- traverse runBuild builders
+          return $ maximum statuses
