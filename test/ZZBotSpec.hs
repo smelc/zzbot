@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module ZZBotSpec (spec) where
 
 import Control.Monad
@@ -27,11 +29,9 @@ shouldFailConfigs =
   , "configs/tests/haltOnFailure3.xml"
   ]
 
-printShouldSucceedConfigs :: [String]
-printShouldSucceedConfigs =
-  [ "configs/config.xml"
-  , "configs/examples/kcg.xml"
-  ]
+otherConfigs :: [String]
+otherConfigs =
+  [ "configs/examples/kcg.xml" ]
 
 spec = do
   describe "zzbot" $ do
@@ -44,7 +44,11 @@ spec = do
       it ("should fail on " <> fileName) $
         zzBot dataFileName [] `shouldNotReturn` ExitSuccess
   describe "zzbot --print" $
-    forM_ printShouldSucceedConfigs $ \fileName -> do
+    forM_ allConfigs $ \fileName -> do
       dataFileName <- runIO (getDataFileName fileName)
       it ("should succeed on " <> fileName) $
         zzBot dataFileName ["--print"] `shouldReturn` ExitSuccess
+  where allConfigs :: [String] =
+             shouldSucceedConfigs
+          ++ shouldFailConfigs
+          ++ otherConfigs  

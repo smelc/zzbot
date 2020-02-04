@@ -46,10 +46,10 @@ function run() {
 }
 
 # Check that code compiles and is warnings free
-stack build || exit $?
+run stack build || exit $?
 # Check that tests pass
-stack test || exit $?
+run stack test || exit $?
 # Check that hints are applied
-stack exec hlint . || exit $?
+run stack exec hlint . || exit $?
 # Generate documentation from sources
-stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?
+run stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?
