@@ -203,7 +203,7 @@ parseStep zxml@ZElem {tag, maybeLine}
   | tag == tSetProperty && isNothing (lookupAttrValue zxml aProperty) =
     failWith (MissingAttribute tag aProperty maybeLine)
   | tag == tSetProperty &&
-    all isNothing (map (lookupAttrValue zxml) [aCommand, aValue]) =
+    all (isNothing . lookupAttrValue zxml) [aCommand, aValue] =
     failWith (TagRequiresExactlyOneOf tSetProperty aCommand aValue maybeLine)
   | tag == tSetProperty && isJust (lookupAttrValue zxml aValue) =
     zxmlToSetPropertyFromValue zxml
