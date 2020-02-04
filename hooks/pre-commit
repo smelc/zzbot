@@ -45,11 +45,27 @@ function run() {
   $@
 }
 
+function install_hlint() {
+  local DOT_BIN=".bin"
+  [[ -e "$DOT_BIN" ]] || run mkdir $DOT_BIN
+  local -r VERSION="2.2.10"
+  local -r FILENAME="hlint-$VERSION"
+  HLINT="$DOT_BIN/$FILENAME"
+  [[ ! -e "$HLINT" ]] || return 0 # Installed already
+  local -r TMP_DEST="/tmp/$FILENAME.tgz"
+  run wget https://github.com/ndmitchell/hlint/releases/download/v$VERSION/hlint-$VERSION-x86_64-linux.tar.gz -O "$TMP_DEST" || { echo "Cannot download hlint"; return 1; }
+  run tar -xzf "$TMP_DEST" "$FILENAME/hlint" || { echo "Cannot extract hlint"; return 1; }
+  run mv "$FILENAME/hlint" "$DOT_BIN/$FILENAME" || { echo "Cannot install hlint"; return 1; }
+  run rmdir "$FILENAME"
+  return 0
+}
+
 # Check that code compiles and is warnings free
 run stack build || exit $?
 # Check that tests pass
 run stack test || exit $?
 # Check that hints are applied
-run stack exec hlint . || exit $?
+install_hlint
+run ./$HLINT . || exit $?
 # Generate documentation from sources
 run stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?
