@@ -1,4 +1,3 @@
-<!-- We test that this builder exits with non 0, because shell has haltOnFailure="True" by default -->
 <config>
   <builder name="test builder">
     <shell command="ls /doesnt_exist"/>

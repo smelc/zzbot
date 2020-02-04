@@ -16,8 +16,6 @@ zzBot file args = do
 shouldSucceedConfigs :: [String]
 shouldSucceedConfigs =
   [ "configs/config.xml"
-  , "configs/tests/haltOnFailure2.xml"
-  , "configs/tests/haltOnFailure3.xml"
   , "configs/tests/db1.xml"
   , "configs/tests/db_nonull.xml"
   ]
@@ -25,6 +23,8 @@ shouldSucceedConfigs =
 shouldFailConfigs :: [String]
 shouldFailConfigs =
   [ "configs/tests/haltOnFailure1.xml"
+  , "configs/tests/haltOnFailure2.xml"
+  , "configs/tests/haltOnFailure3.xml"
   ]
 
 printShouldSucceedConfigs :: [String]
