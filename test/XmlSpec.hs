@@ -22,7 +22,7 @@ badXml2 = "<config><builder></builder></config>"
 expectedResultForBadXml2 = failWith (MissingAttribute tBuilder "name" (Just 1))
 
 badXml3 = "<config><builder name=\"foo\"><foobar/></builder></config>"
-expectedResultForBadXml3 = failWith (UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] "foobar" (Just 1))
+expectedResultForBadXml3 = failWith (UnrecognizedStep "foobar" (Just 1))
 
 badXml4 = "<config><builder name=\"foo\"><shell/></builder></config>"
 expectedResultForBadXml4 = failWith (MissingAttribute tShell "command" (Just 1))
@@ -31,17 +31,16 @@ badXml5 = "<config><builder name=\"foo\"><setProperty value=\"bar\"/></builder><
 expectedResultForBadXml5 =failWith (MissingAttribute tSetProperty aProperty (Just 1))
 
 badXml6 = "<config><builder name=\"foo\"><setProperty property=\"foo\"/></builder></config>"
-expectedResultForBadXml6 = failWith (MissingAttribute tSetProperty aValue (Just 1))
+expectedResultForBadXml6 = failWith (TagRequiresExactlyOneOf tSetProperty aCommand aValue (Just 1))
 
 badXml7 = "<config>\n<builder>\n<shell/>\n<setProperty/>\n<unknown/>\n</builder>\n</config>"
 expectedResultForBadXml7 =
   Failure $
     Set.fromList
-      [ UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] "unknown" (Just 5)
+      [ UnrecognizedStep "unknown" (Just 5)
       , MissingAttribute tBuilder "name" (Just 2)
       , MissingAttribute tShell "command" (Just 3)
       , MissingAttribute tSetProperty aProperty (Just 4)
-      , MissingAttribute tSetProperty aValue (Just 4)
       ]
 
 badXml8 = ""
@@ -117,7 +116,7 @@ expectedResultForBadXml16 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure 
 badXml17 =
   "<config>\n\
   \  <builder name=\"foo\">\n\
-  \    <setPropertyFromCommand command=\"ls\" property=\"whatever\" haltOnFailure=\"foo\"/>\n\
+  \    <setProperty command=\"ls\" property=\"whatever\" haltOnFailure=\"foo\"/>\n\
   \  </builder>\n\
   \</config>"
 expectedResultForBadXml17 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure "foo" (Just 3) ]
@@ -185,6 +184,6 @@ spec =
       parseXmlString badXml15 `shouldBe` expectedResultForBadXml15
     it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tShell) $
       parseXmlString badXml16 `shouldBe` expectedResultForBadXml16
-    it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetPropertyFromCommand ) $
+    it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetProperty) $
       parseXmlString badXml17 `shouldBe` expectedResultForBadXml17
 

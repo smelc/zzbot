@@ -4,7 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Xml (
-  aHaltOnFailure
+  aCommand
+  , aHaltOnFailure
   , aProperty
   , aValue
   , failWith
@@ -13,7 +14,6 @@ module Xml (
   , renderAsXml
   , tBuilder
   , tSetProperty
-  , tSetPropertyFromCommand
   , tShell
   , XmlParsingError(..)
   , XmlValidation
@@ -60,7 +60,6 @@ tBuilder = "builder"
 tEntry = "entry"
 tForeach = "foreach"
 tSetProperty = "setProperty"
-tSetPropertyFromCommand = "setPropertyFromCommand"
 tShell = "shell"
 tSubstitution = "substitution"
 tConfig = "config"
@@ -77,7 +76,7 @@ data ZXML = ZElem {tag :: String,
 data XmlParsingError
   = EmptyCommand (Maybe Line)
   | EmptyDocument
-  | MissingAttribute String String (Maybe Line)
+  | MissingAttribute String String (Maybe Line) -- ^ The tag, the missing attribute, the line
   | NoBuilder (Maybe Line)
   | NotABoolean String String (Maybe Line) -- ^ The attribute that cannot be parsed as a Boolean, the attribute's value, the attribute's line.
   | NoRootElement
@@ -86,6 +85,8 @@ data XmlParsingError
   | UnexpectedTag [String] String (Maybe Line) -- ^ The expected tags, the actual tag
   | UnexpectedText (Maybe Line)
   | UnexpectedCRef
+  | UnrecognizedStep String (Maybe Line) -- ^ The tag, the line
+  | TagRequiresExactlyOneOf String String String (Maybe Line) -- ^ Tag, attr1, attr2, line.
   deriving (Eq, Ord)
 
 instance Show XmlParsingError where
@@ -100,13 +101,28 @@ instance Show XmlParsingError where
       ("Missing attribute in element " ++ elem ++ ": " ++ attr)
       line
   show (ShellAndProperty line) = giveLineInMsg (printf "<%s> should not feature the \"%s\" attribute" tShell aProperty) line
-  show (SetPropertyFromCmdWithoutProperty line) = giveLineInMsg (printf "<%s> must feature the \"%s\" attribute" tSetPropertyFromCommand aProperty) line
+  show (SetPropertyFromCmdWithoutProperty line) = giveLineInMsg (printf "<%s> must feature the \"%s\" attribute" tSetProperty aProperty) line
   show (UnexpectedTag expected actual line) =
     giveLineInMsg
       ("Expected one of " ++ intercalate ", " expected ++ ", got " ++ actual)
       line
   show (UnexpectedText cdLine) = giveLineInMsg "Unexpected Text in XML" cdLine
   show UnexpectedCRef = "Unexpected CRef in XML"
+  show (UnrecognizedStep tag line) =
+    let recognizedTags = [tSetProperty, tShell]
+        msg = if tag `elem` recognizedTags then printf "Invalid attributes in step <%s>" tag
+              else printf
+                     "Unexpected tag for step: \"%s\". Possible tags of steps are: [%s]"
+                     tag $ intercalate ", " (map (\s -> "\"" ++ s ++ "\"") recognizedTags)
+    in giveLineInMsg msg line
+  show (TagRequiresExactlyOneOf tag attr1 attr2 line) =
+    giveLineInMsg
+      (printf "<%s> requires either attribute \"%s\" or attribute \"%s\""
+       tag
+       attr1
+       attr2)
+      line
+    
 
 type XmlParsingErrors = Set.Set XmlParsingError
 type XmlValidation = Validation XmlParsingErrors
@@ -160,7 +176,7 @@ zxmlToSetPropertyFromValue zxml = do
 
 data ShellOrSetPropFromCmd = Shell | SetPropertyFromCommand
 
-validateShellOrSetPropFromCmd :: ShellOrSetPropFromCmd -- ^ Whether the XML is <shell> or <setPropertyFromCommand>
+validateShellOrSetPropFromCmd :: ShellOrSetPropFromCmd -- ^ Whether the XML is <shell> or <setProperty>
                               -> Maybe String -- ^ The (optional) value of the "property" attribute
                               -> Maybe Line -- ^ The (optional) line of the XML considered
                               -> XmlValidation ()
@@ -184,10 +200,16 @@ zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
 
 parseStep :: ZXML -> XmlValidation (Step Parsed)
 parseStep zxml@ZElem {tag, maybeLine}
-  | tag == tSetProperty = zxmlToSetPropertyFromValue zxml
-  | tag == tSetPropertyFromCommand = zxmlToShellCmd zxml SetPropertyFromCommand
-  | tag == tShell                  = zxmlToShellCmd zxml Shell
-  | otherwise = failWith (UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] tag maybeLine)
+  | tag == tSetProperty && isNothing (lookupAttrValue zxml aProperty) =
+    failWith (MissingAttribute tag aProperty maybeLine)
+  | tag == tSetProperty &&
+    all isNothing (map (lookupAttrValue zxml) [aCommand, aValue]) =
+    failWith (TagRequiresExactlyOneOf tSetProperty aCommand aValue maybeLine)
+  | tag == tSetProperty && isJust (lookupAttrValue zxml aValue) =
+    zxmlToSetPropertyFromValue zxml
+  | tag == tSetProperty = zxmlToShellCmd zxml SetPropertyFromCommand
+  | tag == tShell = zxmlToShellCmd zxml Shell
+  | otherwise = failWith (UnrecognizedStep tag maybeLine)
 
 zXMLToBuilder :: ZXML -> XmlValidation (Builder Parsed)
 zXMLToBuilder zxml@ZElem {children} = do
@@ -321,7 +343,7 @@ stepToXml (ShellCmd workdir cmd mprop haltOnFailure) =
       <> aHaltOnFailure =: show haltOnFailure)
     []
  where
-  tag | isJust mprop = tSetPropertyFromCommand
+  tag | isJust mprop = tSetProperty
       | otherwise = tShell
 stepToXml (Ext ext) = absurd ext
 

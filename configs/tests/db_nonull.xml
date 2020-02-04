@@ -3,29 +3,29 @@
     <entry name="zzbot" value="stack exec zzbot --">
   </substitution>
   <builder name="name">
-    <setPropertyFromCommand command="mktemp -u" property="tmpdb"/>
+    <setProperty command="mktemp -u" property="tmpdb"/>
     <shell command="$[zzbot] configs/tests/simplest.xml --database «tmpdb»"/>
     <!-- This config would benefit from <foreach> -->
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(id) from build where id IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(id) from build where id IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(builder) from build where builder IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(builder) from build where builder IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(start) from build where start IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(start) from build where start IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(end) from build where end IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(end) from build where end IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(status) from build where status IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(status) from build where status IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
 
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(id) from step where id IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(id) from step where id IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(build_id) from step where build_id IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(build_id) from step where build_id IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(description) from step where description IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(description) from step where description IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(start) from step where start IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(start) from step where start IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(end) from step where end IS NULL'"  property="nbNulls"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(end) from step where end IS NULL'"  property="nbNulls"/>
     <shell command="expr «nbNulls» = 0"/>
   </builder>
 </config>

@@ -1,5 +1,5 @@
 <config>
   <builder name="test builder">
-    <setPropertyFromCommand command="ls /doesnt_exist" property="whatever"/>
+    <setProperty command="ls /doesnt_exist" property="whatever"/>
   </builder>
 </config>

@@ -3,19 +3,19 @@
     <entry name="zzbot" value="stack exec zzbot --">
   </substitution>
   <builder name="name">
-    <setPropertyFromCommand command="mktemp -u" property="tmpdb"/>
+    <setProperty command="mktemp -u" property="tmpdb"/>
     <shell command="$[zzbot] configs/tests/simplest.xml --database «tmpdb»"/>
     <!-- Exactly one row in table 'build' -->
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(*) from build'"  property="nbBuilds"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(*) from build'"  property="nbBuilds"/>
     <shell command="expr «nbBuilds» = 1"/>
     <!-- Unique 'build' row has ID 1 -->
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT id from build'" property="buildID"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT id from build'" property="buildID"/>
     <shell command="expr «buildID» = 1"/>
     <!-- Exactly one row in table 'step' -->
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT COUNT(*) from step'"   property="nbSteps"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT COUNT(*) from step'"   property="nbSteps"/>
     <shell command="expr «nbSteps» = 1"/>
     <!-- Unique 'step' row has ID 1 -->
-    <setPropertyFromCommand command="sqlite3 «tmpdb» 'SELECT id from step'"  property="stepID"/>
+    <setProperty command="sqlite3 «tmpdb» 'SELECT id from step'"  property="stepID"/>
     <shell command="expr «stepID» = 1"/>
   </builder>
 </config>
