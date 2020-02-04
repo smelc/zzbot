@@ -1,4 +1,3 @@
-<!-- We test that this builder exits with 0, despite the command failing; because setPropertyFromCommand has haltOnFailure="False" by default -->
 <config>
   <builder name="test builder">
     <setPropertyFromCommand command="ls /doesnt_exist" property="whatever"/>

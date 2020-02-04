@@ -31,6 +31,7 @@ library
                      containers,
                      eff,
                      either,
+                     extra,
                      filepath,
                      megaparsec,
                      prettyprinter,
@@ -51,6 +52,7 @@ executable zzbot
                      containers,
                      directory,
                      eff,
+                     extra,
                      optparse-applicative,
                      validation,
                      zzbot
