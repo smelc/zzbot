@@ -5,15 +5,37 @@ module ZZBotSpec (spec) where
 import Control.Monad
 import Test.Hspec
 import System.Exit
+import System.IO
+import System.IO.Temp
 import System.Process
 import Paths_zzbot
 
 type Args = [String]
 
-zzBot :: FilePath -> Args -> IO ExitCode
+-- | Executes zzbot on the given arguments, returning exit code and stdout
+zzBot :: FilePath -> Args -> IO (ExitCode, String)
 zzBot file args = do
-  (exitCode, _, _) <- readProcessWithExitCode "zzbot" (file:args) ""
+  (exitCode, stdout, _) <- readProcessWithExitCode "zzbot" (file:args) ""
+  return (exitCode, stdout)
+
+-- | Executes zzbot on the given arguments, returning the exit code
+zzRc :: FilePath -> Args -> IO ExitCode
+zzRc file args = do
+  (exitCode, stdout) <- zzBot file args
   return exitCode
+
+-- | Executes zzbot --print on a single file, then reexecute zzbot --print on the generated output
+-- (if the initial execution succeeded)
+zzPrintPrint :: FilePath -> IO ExitCode
+zzPrintPrint file = do
+  (exitCode, stdout) <- zzBot file ["--print"]
+  case exitCode of
+    ExitFailure _ -> return exitCode
+    ExitSuccess ->
+      join $ -- @polux: Is 'join' idiomatic?
+        withSystemTempFile "zzprintout" $ \tmp hfile -> do
+          hPutStr hfile stdout
+          return $ zzRc tmp ["--print"]
 
 shouldSucceedConfigs :: [String]
 shouldSucceedConfigs =
@@ -38,16 +60,21 @@ spec = do
     forM_ shouldSucceedConfigs $ \fileName -> do
       dataFileName <- runIO (getDataFileName fileName)
       it ("should succeed on " <> fileName) $
-        zzBot dataFileName [] `shouldReturn` ExitSuccess
+        zzRc dataFileName [] `shouldReturn` ExitSuccess
     forM_ shouldFailConfigs $ \fileName -> do
       dataFileName <- runIO (getDataFileName fileName)
       it ("should fail on " <> fileName) $
-        zzBot dataFileName [] `shouldNotReturn` ExitSuccess
+        zzRc dataFileName [] `shouldNotReturn` ExitSuccess
   describe "zzbot --print" $
     forM_ allConfigs $ \fileName -> do
       dataFileName <- runIO (getDataFileName fileName)
       it ("should succeed on " <> fileName) $
-        zzBot dataFileName ["--print"] `shouldReturn` ExitSuccess
+        zzRc dataFileName ["--print"] `shouldReturn` ExitSuccess
+  describe "zzbot --print is idempotent" $
+    forM_ allConfigs $ \fileName -> do
+      dataFileName <- runIO (getDataFileName fileName)
+      it ("should succeed on " <> fileName) $
+        zzPrintPrint dataFileName `shouldReturn` ExitSuccess
   where allConfigs :: [String] =
              shouldSucceedConfigs
           ++ shouldFailConfigs

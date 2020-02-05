@@ -76,6 +76,7 @@ test-suite spec
                      prettyprinter-ansi-terminal,
                      process,
                      QuickCheck,
+                     temporary,
                      validation,
                      zzbot
   build-tool-depends: zzbot:zzbot
