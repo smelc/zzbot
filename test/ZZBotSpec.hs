@@ -13,28 +13,22 @@ import Paths_zzbot
 type Args = [String]
 
 -- | Executes zzbot on the given arguments, returning exit code and stdout
-zzBot :: FilePath -> Args -> IO (ExitCode, String)
-zzBot file args = do
-  (exitCode, stdout, _) <- readProcessWithExitCode "zzbot" (file:args) ""
-  return (exitCode, stdout)
+zzBot :: FilePath -> Args -> IO (ExitCode, String, String)
+zzBot file args =
+  readProcessWithExitCode "zzbot" (file:args) ""
+
+zzBotOn :: String -> Args -> IO (ExitCode, String, String)
+zzBotOn fileContent args =
+  withSystemTempFile "zzprintout" $ \tmp hfile -> do
+    hPutStr hfile fileContent
+    hFlush hfile
+    zzBot tmp args
 
 -- | Executes zzbot on the given arguments, returning the exit code
 zzRc :: FilePath -> Args -> IO ExitCode
 zzRc file args = do
-  (exitCode, stdout) <- zzBot file args
+  (exitCode, _, _) <- zzBot file args
   return exitCode
-
--- | Executes zzbot --print on a single file, then reexecute zzbot --print on the generated output
--- (if the initial execution succeeded)
-zzPrintPrint :: FilePath -> IO ExitCode
-zzPrintPrint file = do
-  (exitCode, stdout) <- zzBot file ["--print"]
-  case exitCode of
-    ExitFailure _ -> return exitCode
-    ExitSuccess ->
-      withSystemTempFile "zzprintout" $ \tmp hfile -> do
-        hPutStr hfile stdout
-        zzRc tmp ["--print"]
 
 shouldSucceedConfigs :: [String]
 shouldSucceedConfigs =
@@ -69,11 +63,10 @@ spec = do
       dataFileName <- runIO (getDataFileName fileName)
       it ("should succeed on " <> fileName) $
         zzRc dataFileName ["--print"] `shouldReturn` ExitSuccess
-  describe "zzbot --print is idempotent" $
-    forM_ allConfigs $ \fileName -> do
-      dataFileName <- runIO (getDataFileName fileName)
-      it ("should succeed on " <> fileName) $
-        zzPrintPrint dataFileName `shouldReturn` ExitSuccess
+      it ("is idempotent on " <> fileName) $ do
+        res1@(_, stdout1, _) <- zzBot dataFileName ["--print"]
+        res2 <- zzBotOn stdout1 ["--print"]
+        res1 `shouldBe` res2
   where allConfigs :: [String] =
              shouldSucceedConfigs
           ++ shouldFailConfigs
