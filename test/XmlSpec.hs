@@ -1,19 +1,24 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 
 module XmlSpec (spec) where
 
 import Config
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Validation
+import Data.Void
+import Debug.Trace
 import Xml
+import RandomConfigs
 import System.Exit
 import Test.Hspec
+import Test.Hspec.QuickCheck
 import Test.QuickCheck hiding (Failure, Success)
 import Text.Printf
 
 import qualified Data.Set as Set
-import qualified Test.Hspec.QuickCheck as QuickCheck
+
 
 badXml1 = "<config><builder name=\"foo\"/><foobar></foobar></config>"
 expectedResultForBadXml1 = failWith (UnexpectedTag [tBuilder, "substitution"] "foobar" (Just 1))
@@ -147,9 +152,22 @@ expectedResultForValidXml = Success config
   subst = [("aa", "11"), ("aa", "11"), ("bb", "22")]
   config = Config (builder :| []) subst
 
+
 spec :: SpecWith ()
 spec =
   describe "parseXmlString" $ do
+    -- configs of size 40 are already very large
+    modifyMaxSize (const 40) $
+      it "should be the inverse of renderXml" $
+        property $ \config ->
+          case normalizeTestConfig config of
+            Failure _ ->
+              -- we discard this config as it does not normalize
+              discard
+            Success substitutedConfig ->
+              normalizeTestConfig <$> parseXmlString (renderAsXml substitutedConfig)
+              `shouldBe`
+              Success (Success substitutedConfig)
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml
     it "should fail on bad toplevel element" $
@@ -186,4 +204,7 @@ spec =
       parseXmlString badXml16 `shouldBe` expectedResultForBadXml16
     it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetProperty) $
       parseXmlString badXml17 `shouldBe` expectedResultForBadXml17
+ where
+  normalizeTestConfig :: Config Parsed -> ConfigValidation (Config Substituted)
+  normalizeTestConfig = substAll [] . normalize ""
 

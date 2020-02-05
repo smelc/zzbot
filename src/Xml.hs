@@ -122,7 +122,7 @@ instance Show XmlParsingError where
        attr1
        attr2)
       line
-    
+
 
 type XmlParsingErrors = Set.Set XmlParsingError
 type XmlValidation = Validation XmlParsingErrors
@@ -144,7 +144,7 @@ parseBool :: String -- ^ An attribute
           -> String -- ^ The attribute's value
           -> Maybe Line -- ^ The line from which the attribute comes
           -> XmlValidation Bool
-parseBool attr value maybeLine = 
+parseBool attr value maybeLine =
   let mvalue :: Maybe Bool = readMaybe value in
   case mvalue of
     Nothing -> failWith $ NotABoolean attr value maybeLine
@@ -334,10 +334,10 @@ stepToXml (SetPropertyFromValue prop value) =
     tSetProperty
     (aProperty =: prop <> aValue =: value)
     []
-stepToXml (ShellCmd workdir cmd mprop haltOnFailure) =
+stepToXml (ShellCmd workdir Command{cmdString} mprop haltOnFailure) =
   element
     tag
-    (aCommand =: show cmd
+    (aCommand =: cmdString
       <> aWorkdir =: workdir
       <> aProperty =? mprop
       <> aHaltOnFailure =: show haltOnFailure)
@@ -357,7 +357,7 @@ entryToXml (name, value) =
 
 builderToXml :: Builder Substituted -> Element
 builderToXml (Builder () name steps) =
-  element tBuilder [] (map (Elem . stepToXml) steps)
+  element tBuilder (aName =: name) (map (Elem . stepToXml) steps)
 
 configToXml :: Config Substituted -> Element
 configToXml (Config builders ()) =
