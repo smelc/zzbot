@@ -34,6 +34,7 @@ zzPrintPrint file = do
     ExitSuccess ->
       withSystemTempFile "zzprintout" $ \tmp hfile -> do
         hPutStr hfile stdout
+        hFlush hfile
         zzRc tmp ["--print"]
 
 shouldSucceedConfigs :: [String]
