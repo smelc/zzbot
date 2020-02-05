@@ -77,4 +77,4 @@ spec = do
   where allConfigs :: [String] =
              shouldSucceedConfigs
           ++ shouldFailConfigs
-          ++ otherConfigs  
+          ++ otherConfigs

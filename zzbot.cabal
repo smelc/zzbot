@@ -62,6 +62,7 @@ test-suite spec
   main-is:           Tests.hs
   other-modules:     ConfigSpec,
                      ExecSpec,
+                     RandomConfigs,
                      XmlSpec,
                      ZZBotSpec,
                      Paths_zzbot
@@ -70,6 +71,7 @@ test-suite spec
   hs-source-dirs:    test
   build-depends:     base >= 4.7 && < 5,
                      containers,
+                     generic-random,
                      hspec,
                      lens,
                      mtl,
