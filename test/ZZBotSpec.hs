@@ -32,10 +32,9 @@ zzPrintPrint file = do
   case exitCode of
     ExitFailure _ -> return exitCode
     ExitSuccess ->
-      join $ -- @polux: Is 'join' idiomatic?
-        withSystemTempFile "zzprintout" $ \tmp hfile -> do
-          hPutStr hfile stdout
-          return $ zzRc tmp ["--print"]
+      withSystemTempFile "zzprintout" $ \tmp hfile -> do
+        hPutStr hfile stdout
+        zzRc tmp ["--print"]
 
 shouldSucceedConfigs :: [String]
 shouldSucceedConfigs =
