@@ -50,10 +50,10 @@ instance MonadExec () LoggingMockExec where
   putErr str = tell [StdErr str]
 
 instance DbOperations () LoggingMockExec where
-   startBuild name = return (BuildState 0 Success)
+   startBuild name = return 0
    startStep state desc = return 0
-   endStep state stepID streams status = return (withMaxStatus state status)
-   endBuild state = return Success
+   endStep state stepID streams status = return ()
+   endBuild buildId status = return ()
 
 -- Tracing mock exec
 
@@ -75,10 +75,10 @@ instance MonadExec () TracingMockExec where
   putErr str = return ()
 
 instance DbOperations () TracingMockExec where
-   startBuild name = return (BuildState 0 Success)
+   startBuild name = return 0
    startStep state desc = return 0
-   endStep state stepID streams status = return (withMaxStatus state status)
-   endBuild state = return Success
+   endStep state stepID streams status = return ()
+   endBuild buildId status = return ()
 
 -- FakeDb mock exec
 data BuildEntry = BuildEntry
@@ -135,20 +135,18 @@ instance DbOperations () FakeDbMockExec where
   startBuild name = do
     buildId <- freshId
     fakeDbBuilds . at buildId ?= BuildEntry name Nothing
-    return (BuildState buildId Success)
-  endBuild (BuildState buildId status) = do
+    return buildId
+  endBuild buildId status =
     fakeDbBuilds . ix buildId %= updateBuildEntry status
-    return status
    where
     updateBuildEntry status (BuildEntry name _) =
       BuildEntry name (Just status)
-  startStep (BuildState buildId _) step = do
+  startStep buildId step = do
     stepId <- freshId
     fakeDbSteps . at (stepId, buildId) ?= StepEntry step Nothing Nothing
     return stepId
-  endStep (BuildState buildId buildStatus) stepId streams status = do
+  endStep buildId stepId streams status =
     fakeDbSteps . ix (stepId, buildId) %= updateStepEntry streams status
-    return (BuildState buildId (max buildStatus status))
    where
     updateStepEntry streams status (StepEntry step _ _) =
       StepEntry step (Just streams) (Just status)
