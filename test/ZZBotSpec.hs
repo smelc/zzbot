@@ -35,6 +35,7 @@ shouldSucceedConfigs =
   [ "configs/config.xml"
   , "configs/tests/db1.xml"
   , "configs/tests/db_nonull.xml"
+  , "configs/tests/haltOnFailure4.xml"
   ]
 
 shouldFailConfigs :: [String]

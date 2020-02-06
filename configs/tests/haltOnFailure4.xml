@@ -3,7 +3,7 @@
     <entry name="zzbot" value="stack exec zzbot --">
   </substitution>
   <builder name="test builder">
-    <! This tests that the second command of haltOnFailure2 executes, despite the first one failing; thanks to haltOnFailure=False -->
+    <!-- This tests that the second command of haltOnFailure2 executes, despite the first one failing; thanks to haltOnFailure=False -->
     <shell command="$[zzbot] configs/tests/haltOnFailure2.xml | grep 'dépasse'"/>
   </builder>
 </config>
