@@ -4,7 +4,7 @@
 
 Documentation: [index.md](https://github.com/smelc/zzbot/blob/master/doc/src/index.md)
 
-Example input file: [config.xml](https://github.com/smelc/zzbot/blob/master/configs/config.xml)
+Example input file: [config.xml](https://github.com/smelc/zzbot/blob/master/configs/examples/kcg.xml)
 
 # Installation
 
@@ -20,7 +20,7 @@ stack install zzbot --local-bin-path INSTALL_PATH # INSTALL_PATH can for example
 
 Useful commands:
 
-* `stack build` build the `zzbot` executable
+* `stack build` builds the `zzbot` executable
 * `stack run zzbot configs/config.xml` executes the builders listed in `configs/config.xml`
 
 Test and documentation commmands:

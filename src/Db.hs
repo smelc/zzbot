@@ -10,9 +10,7 @@
 module Db (
   DbOperations(..),
   DbOperationsUsingLowLevelDbT,
-  BuildState(..), -- visible for testing
   interpretDbOpsAsLowLevelDbOps,
-  withMaxStatus
 ) where
 
 import Control.Effect
@@ -23,41 +21,29 @@ import Common
 import Config
 import qualified LowLevelDb as Low
 
--- | The build identifier and its status (so far)
-data BuildState = BuildState BuildID Status
-
-withMaxStatus :: BuildState -> Status -> BuildState
-withMaxStatus (BuildState buildID s1) s2 =
-   BuildState buildID (max s1 s2)
-
 class Monad m => DbOperations m where
-   startBuild :: String -> m BuildState -- ^ The string is the builder's name
-   startStep :: BuildState -> Step Substituted -> m StepID -- ^ The string is the step's description
-   endStep :: BuildState -> StepID -> StepStreams -> Status -> m BuildState -- ^ stdout, stderr, step status
-   endBuild :: BuildState -> m Status -- ^ Returns the overall state of the build
+   startBuild
+     :: String -- ^ The builder's name
+     -> m BuildID
+   startStep :: BuildID -> Step Substituted -> m StepID
+   endStep :: BuildID -> StepID -> StepStreams -> Status -> m ()
+   endBuild :: BuildID -> Status -> m ()
 
 instance (Monad (t m), Send DbOperations t m) => DbOperations (EffT t m) where
   startBuild name = send @DbOperations (startBuild name)
-  startStep state desc = send @DbOperations (startStep state desc)
-  endStep state stepID streams status = send @DbOperations (endStep state stepID streams status)
-  endBuild state = send @DbOperations (endBuild state)
+  startStep buildId step = send @DbOperations (startStep buildId step)
+  endStep buildId stepID streams status = send @DbOperations (endStep buildId stepID streams status)
+  endBuild buildId status = send @DbOperations (endBuild buildId status)
 
 data DbOperationsUsingLowLevelDb
 type DbOperationsUsingLowLevelDbT = HandlerT DbOperationsUsingLowLevelDb '[]
 type instance Handles DbOperationsUsingLowLevelDbT eff = eff == DbOperations
 
 instance Low.LowLevelDbOperations m => DbOperations (DbOperationsUsingLowLevelDbT m) where
-  startBuild builderName = HandlerT $ do
-    buildID <- Low.startBuild builderName
-    return $ BuildState buildID Success
-  startStep buildState@(BuildState buildID _) step = HandlerT $
-    Low.startStep buildID (J.encode step)
-  endStep (BuildState buildId buildStatus) stepID streams status = HandlerT $ do
-    Low.endStep stepID streams status
-    return $ BuildState buildId (max buildStatus status)
-  endBuild buildState@(BuildState buildID status) = HandlerT $ do
-    Low.endBuild buildID status
-    return status
+  startBuild name = HandlerT $ Low.startBuild name
+  startStep buildID step = HandlerT $ Low.startStep buildID (J.encode step)
+  endStep buildId stepId streams status = HandlerT $ Low.endStep stepId streams status
+  endBuild buildId status = HandlerT $ Low.endBuild buildId status
 
 interpretDbOpsAsLowLevelDbOps
   :: EffT DbOperationsUsingLowLevelDbT m a
