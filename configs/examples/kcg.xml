@@ -7,9 +7,12 @@
   <builder name="kcg">
     <!-- json -->
     <shell command="which $[jsonlint]"/>
-    <shell command="$[jsonlint] cardgen/src/commonMain/resources/creatures.json"/>
-    <!-- build -->
+    <shell command="$[jsonlint] cardgen/src/commonMain/resources/data.json"/>
+    <!-- build: JVM -->
     <shell command="$[gradle] jvmMainClasses" workdir="cardgen"/>
     <shell command="$[gradle] jvmTestClasses" workdir="cardgen"/>
+    <!-- build: Javascript -->
+    <shell command="$[gradle] jsMainClasses" workdir="cardgen"/>
+    <shell command="$[gradle] jsTest"        workdir="cardgen"/>
   </builder>
 </config>

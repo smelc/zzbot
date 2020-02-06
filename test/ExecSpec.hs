@@ -106,10 +106,10 @@ runStubDbOps
 runStubDbOps = runHandlerT . runEffT
 
 instance Monad m => DbOperations (DbOperationsStubT m) where
-  startBuild name = HandlerT $ return (BuildState 0 Success)
-  startStep state desc = HandlerT $ return 0
-  endStep state stepID streams status = HandlerT $ return (withMaxStatus state status)
-  endBuild state = HandlerT $ return Success
+   startBuild name = HandlerT $ return 0
+   startStep state desc = HandlerT $ return 0
+   endStep state stepID streams status = HandlerT $ return ()
+   endBuild buildId status = HandlerT $ return ()
 
 -- FakeDb mock exec
 
@@ -167,21 +167,19 @@ runDbOpsWithFakeDb db = runState db . runHandlerT . runEffT
 instance Monad m => DbOperations (DbOperationsFakeDbT m) where
   startBuild name = HandlerT $ do
     buildId <- freshId
-    modify $ fakeDbBuilds . at buildId ?~ BuildEntry name Nothing
-    return (BuildState buildId Success)
-  endBuild (BuildState buildId status) = HandlerT $ do
-    modify $ fakeDbBuilds . ix buildId %~ updateBuildEntry status
-    return status
+    modify (fakeDbBuilds . at buildId ?~ BuildEntry name Nothing)
+    return buildId
+  endBuild buildId status = HandlerT $
+    modify (fakeDbBuilds . ix buildId %~ updateBuildEntry status)
    where
     updateBuildEntry status (BuildEntry name _) =
       BuildEntry name (Just status)
-  startStep (BuildState buildId _) step = HandlerT $ do
+  startStep buildId step = HandlerT $ do
     stepId <- freshId
-    modify $ fakeDbSteps . at (stepId, buildId) ?~ StepEntry step Nothing Nothing
+    modify (fakeDbSteps . at (stepId, buildId) ?~ StepEntry step Nothing Nothing)
     return stepId
-  endStep (BuildState buildId buildStatus) stepId streams status = HandlerT $ do
-    modify $ fakeDbSteps . ix (stepId, buildId) %~ updateStepEntry streams status
-    return (BuildState buildId (max buildStatus status))
+  endStep buildId stepId streams status = HandlerT $
+    modify (fakeDbSteps . ix (stepId, buildId) %~ updateStepEntry streams status)
    where
     updateStepEntry streams status (StepEntry step _ _) =
       StepEntry step (Just streams) (Just status)

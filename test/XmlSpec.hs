@@ -1,19 +1,24 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 
 module XmlSpec (spec) where
 
 import Config
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Validation
+import Data.Void
+import Debug.Trace
 import Xml
+import RandomConfigs
 import System.Exit
 import Test.Hspec
+import Test.Hspec.QuickCheck
 import Test.QuickCheck hiding (Failure, Success)
 import Text.Printf
 
 import qualified Data.Set as Set
-import qualified Test.Hspec.QuickCheck as QuickCheck
+
 
 badXml1 = "<config><builder name=\"foo\"/><foobar></foobar></config>"
 expectedResultForBadXml1 = failWith (UnexpectedTag [tBuilder, "substitution"] "foobar" (Just 1))
@@ -22,7 +27,7 @@ badXml2 = "<config><builder></builder></config>"
 expectedResultForBadXml2 = failWith (MissingAttribute tBuilder "name" (Just 1))
 
 badXml3 = "<config><builder name=\"foo\"><foobar/></builder></config>"
-expectedResultForBadXml3 = failWith (UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] "foobar" (Just 1))
+expectedResultForBadXml3 = failWith (UnrecognizedStep "foobar" (Just 1))
 
 badXml4 = "<config><builder name=\"foo\"><shell/></builder></config>"
 expectedResultForBadXml4 = failWith (MissingAttribute tShell "command" (Just 1))
@@ -31,17 +36,16 @@ badXml5 = "<config><builder name=\"foo\"><setProperty value=\"bar\"/></builder><
 expectedResultForBadXml5 =failWith (MissingAttribute tSetProperty aProperty (Just 1))
 
 badXml6 = "<config><builder name=\"foo\"><setProperty property=\"foo\"/></builder></config>"
-expectedResultForBadXml6 = failWith (MissingAttribute tSetProperty aValue (Just 1))
+expectedResultForBadXml6 = failWith (TagRequiresExactlyOneOf tSetProperty aCommand aValue (Just 1))
 
 badXml7 = "<config>\n<builder>\n<shell/>\n<setProperty/>\n<unknown/>\n</builder>\n</config>"
 expectedResultForBadXml7 =
   Failure $
     Set.fromList
-      [ UnexpectedTag [tSetProperty, tSetPropertyFromCommand, tShell] "unknown" (Just 5)
+      [ UnrecognizedStep "unknown" (Just 5)
       , MissingAttribute tBuilder "name" (Just 2)
       , MissingAttribute tShell "command" (Just 3)
       , MissingAttribute tSetProperty aProperty (Just 4)
-      , MissingAttribute tSetProperty aValue (Just 4)
       ]
 
 badXml8 = ""
@@ -117,7 +121,7 @@ expectedResultForBadXml16 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure 
 badXml17 =
   "<config>\n\
   \  <builder name=\"foo\">\n\
-  \    <setPropertyFromCommand command=\"ls\" property=\"whatever\" haltOnFailure=\"foo\"/>\n\
+  \    <setProperty command=\"ls\" property=\"whatever\" haltOnFailure=\"foo\"/>\n\
   \  </builder>\n\
   \</config>"
 expectedResultForBadXml17 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure "foo" (Just 3) ]
@@ -148,9 +152,22 @@ expectedResultForValidXml = Success config
   subst = [("aa", "11"), ("aa", "11"), ("bb", "22")]
   config = Config (builder :| []) subst
 
+
 spec :: SpecWith ()
 spec =
   describe "parseXmlString" $ do
+    -- configs of size 40 are already very large
+    modifyMaxSize (const 40) $
+      it "should be the inverse of renderXml" $
+        property $ \config ->
+          case normalizeTestConfig config of
+            Failure _ ->
+              -- we discard this config as it does not normalize
+              discard
+            Success substitutedConfig ->
+              normalizeTestConfig <$> parseXmlString (renderAsXml substitutedConfig)
+              `shouldBe`
+              Success (Success substitutedConfig)
     it "should succeed on valid XML" $
       parseXmlString validXml `shouldBe` expectedResultForValidXml
     it "should fail on bad toplevel element" $
@@ -185,6 +202,9 @@ spec =
       parseXmlString badXml15 `shouldBe` expectedResultForBadXml15
     it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tShell) $
       parseXmlString badXml16 `shouldBe` expectedResultForBadXml16
-    it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetPropertyFromCommand ) $
+    it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetProperty) $
       parseXmlString badXml17 `shouldBe` expectedResultForBadXml17
+ where
+  normalizeTestConfig :: Config Parsed -> ConfigValidation (Config Substituted)
+  normalizeTestConfig = substAll [] . normalize ""
 
