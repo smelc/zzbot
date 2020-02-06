@@ -39,7 +39,7 @@ import System.Exit
 import System.IO
 import System.Process
 
-import Common (StepStreams(StepStreams), toStatus)
+import Common (StepStreams(StepStreams), toStatus, BuildID, Status)
 import Config
 import Db
 import Xml
@@ -47,14 +47,13 @@ import Xml
 import qualified Common
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified GHC.IO.Handle as Handle
 
 type Properties = Map.Map String String
 
 -- | The second element maps build variables to their values
 data BuildContext = BuildContext
-  { buildState :: BuildState -- ^ Build identifier and build status (so far)
-  , properties :: Map.Map String String -- ^ Build properties
+  { buildStatus :: Common.Status -- ^ Build identifier and build status (so far)
+  , properties :: Properties -- ^ Build properties
   }
 
 data LogLevel = InfoLevel | ErrorLevel
@@ -107,22 +106,23 @@ dynSubstDelimiters = ("«", "»")
 runSteps
   :: forall s1 s2 m
    . (MonadExec s1 m, DbOperations s2 m)
-  => BuildContext
+  => BuildID
+  -> BuildContext
   -> [Step Substituted]
   -> m BuildContext
-runSteps ctxt [] = return ctxt
-runSteps ctxt@BuildContext{buildState, properties} (step:steps) =
+runSteps _ ctxt [] = return ctxt
+runSteps buildId ctxt@BuildContext{buildStatus, properties} (step:steps) =
   case substitute dynSubstDelimiters (Map.toList properties) step  of
     Failure errors -> do
       zzLogError @s1 (buildErrorMsg errors)
-      return $ BuildContext (withMaxStatus buildState Common.Failure) properties
+      return $ BuildContext (max buildStatus Common.Failure) properties
     Success step' -> do
-      stepID <- startStep @s2 buildState step'
+      stepID <- startStep @s2 buildId step'
       -- We must call endStep now, no matter what happens. Could we handle that like a resource?
       (properties', streams, status, continue) <- runStep @s1 properties step'
-      buildState' <- endStep @s2 buildState stepID streams status
-      let ctxt' = BuildContext buildState' properties'
-      if continue then runSteps @s1 @s2 ctxt' steps
+      endStep @s2 buildId stepID streams status
+      let ctxt' = BuildContext (max buildStatus status) properties'
+      if continue then runSteps @s1 @s2 buildId ctxt' steps
       else return ctxt'
 
 runStep
@@ -130,7 +130,7 @@ runStep
    . MonadExec s m
   => Properties
   -> Step Substituted -- ^ The step to execute
-  -> m (Properties, StepStreams, Common.Status, Bool) -- ^ Last Bool indicates if build should go on
+  -> m (Properties, StepStreams, Status, Bool) -- ^ Last Bool indicates if build should go on
 runStep properties (SetPropertyFromValue prop value) =
   return (properties', StepStreams Nothing Nothing, Common.Success, True)
   where properties' = Map.insert prop value properties
@@ -153,12 +153,12 @@ runBuild
   :: forall s1 s2 m
    . (MonadExec s1 m, DbOperations s2 m)
   => Builder Substituted
-  -> m Common.Status
+  -> m Status
 runBuild (Builder () name steps) = do
-  initialState <- startBuild @s2 name
-  finalCtxt <- runSteps @s1 @s2 (BuildContext initialState Map.empty) steps
-  endBuild @s2 (buildState finalCtxt)
-  return $ (\(BuildState _ status) -> status) (buildState finalCtxt)
+  buildId <- startBuild @s2 name
+  finalCtxt <- runSteps @s1 @s2 buildId (BuildContext Common.Success Map.empty) steps
+  endBuild @s2 buildId (buildStatus finalCtxt)
+  return $ buildStatus finalCtxt
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
