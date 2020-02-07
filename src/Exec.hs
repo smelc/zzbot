@@ -52,12 +52,6 @@ import qualified Data.Set as Set
 
 type Properties = Map.Map String String
 
--- | The second element maps build variables to their values
-data BuildContext = BuildContext
-  { buildStatus :: Common.Status -- ^ Build identifier and build status (so far)
-  , properties :: Properties -- ^ Build properties
-  }
-
 data LogLevel = InfoLevel | ErrorLevel
   deriving (Eq, Show)
 
@@ -122,23 +116,23 @@ runSteps
   :: MonadExec m
   => DbOperations m
   => BuildID
-  -> BuildContext
+  -> Properties
   -> [Step Substituted]
-  -> m BuildContext
-runSteps _ ctxt [] = return ctxt
-runSteps buildId ctxt@BuildContext{buildStatus, properties} (step:steps) =
+  -> m Status
+runSteps _ ctxt [] = return Common.Success
+runSteps buildId properties (step:steps) =
   case substitute dynSubstDelimiters (Map.toList properties) step  of
     Failure errors -> do
       zzLogError (buildErrorMsg errors)
-      return $ BuildContext (max buildStatus Common.Failure) properties
+      return Common.Failure
     Success step' -> do
       stepID <- startStep buildId step'
       -- We must call endStep now, no matter what happens. Could we handle that like a resource?
       (properties', streams, status, continue) <- runStep properties step'
       endStep buildId stepID streams status
-      let ctxt' = BuildContext (max buildStatus status) properties'
-      if continue then runSteps buildId ctxt' steps
-      else return ctxt'
+      if continue
+        then max status <$> runSteps buildId properties' steps
+        else return status
 
 runStep
   :: MonadExec m
@@ -170,9 +164,9 @@ runBuild
   -> m Status
 runBuild (Builder () name steps) = do
   buildId <- startBuild name
-  finalCtxt <- runSteps buildId (BuildContext Common.Success Map.empty) steps
-  endBuild buildId (buildStatus finalCtxt)
-  return $ buildStatus finalCtxt
+  finalStatus <- runSteps buildId Map.empty steps
+  endBuild buildId finalStatus
+  return finalStatus
 
 data ProcessEnv = ProcessEnv { workdir :: FilePath, -- ^ The working directory
                                sysenv :: [(String, String)] -- ^ The system's environment
