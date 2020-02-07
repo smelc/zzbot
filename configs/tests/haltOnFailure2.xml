@@ -1,5 +1,8 @@
+<!-- haltOnFailure4.xml depends on this file -->
 <config>
   <builder name="test builder">
     <shell command="ls /doesnt_exist" haltOnFailure="False"/>
+    <!-- echo should be executed, despite the failure of the first step; because of haltOnFailure being false -->
+    <shell command="echo mais ça dépasse l entendement"/>
   </builder>
 </config>
