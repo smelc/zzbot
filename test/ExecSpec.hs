@@ -176,7 +176,7 @@ spec =
       \    <shell workdir=\"dir2\" command=\"ls b\"/>\
       \    <shell workdir=\"/absolute/dir\" command=\"ls b\"/>\
       \    <shell command=\"some junk 1\" haltOnFailure=\"False\"/>\
-      \    <shell command=\"some junk 2\"/>\
+      \    <shell command=\"some junk 2\" ignoreFailure=\"True\"/>\
       \    <shell command=\"some junk 3\"/>\
       \  </builder>\
       \</config>"
@@ -218,6 +218,7 @@ spec =
                       , cmd = Command "ls a"
                       , mprop = Nothing
                       , haltOnFailure = True
+                      , ignoreFailure = False
                       }
                   , stepEntryStreams =
                       Just (StepStreams (Just "foo bar") (Just ""))
@@ -229,6 +230,7 @@ spec =
                       , cmd = Command "ls b"
                       , mprop = Nothing
                       , haltOnFailure = True
+                      , ignoreFailure = False
                       }
                   , stepEntryStreams =
                       Just (StepStreams (Just "bar baz") (Just ""))
@@ -240,6 +242,7 @@ spec =
                       , cmd = Command "ls b"
                       , mprop = Nothing
                       , haltOnFailure = True
+                      , ignoreFailure = False
                       }
                   , stepEntryStreams =
                       Just (StepStreams (Just "bar baz") (Just ""))
@@ -251,6 +254,7 @@ spec =
                       , cmd = Command "some junk 1"
                       , mprop = Nothing
                       , haltOnFailure = False
+                      , ignoreFailure = False
                       }
                   , stepEntryStreams =
                       Just (StepStreams (Just "") (Just "command not found"))
@@ -262,10 +266,11 @@ spec =
                       , cmd = Command "some junk 2"
                       , mprop = Nothing
                       , haltOnFailure = True
+                      , ignoreFailure = True
                       }
                   , stepEntryStreams =
                       Just (StepStreams (Just "") (Just "command not found"))
-                  , stepEntryStatus = Just Failure
+                  , stepEntryStatus = Just Success
                   }
               ]
           )

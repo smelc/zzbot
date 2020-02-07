@@ -1,0 +1,6 @@
+<!-- build should success because ignoreFailure defaults to True for <set_property> -->
+<config>
+  <builder name="test builder">
+    <setProperty command="ls /doesnt_exist" property="prop"/>
+  </builder>
+</config>
