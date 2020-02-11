@@ -49,7 +49,7 @@ testSubstitute = do
       duplicates [0, 0] `shouldBe` [0]
     it "duplicates [0, 1] should be []" $
       duplicates [0, 1] `shouldBe` []
-  describe "subsitute" $ do
+  describe "substitute" $ do
     it "should succeed when all variables are known" $
       substitute @(Builder Normalized) @(Builder Substituted) ("(", ")") goodSubst builder `shouldBe` V.Success expectedSuccess
     it "should fail when some variables are unknown" $
@@ -58,13 +58,13 @@ testSubstitute = do
   builder =
     Builder () "builder"
       [ SetPropertyFromValue "prop" "foo(a)bar(b)baz"
-      , ShellCmd "(b)" (Command "ls (a) (b)") Nothing True
+      , ShellCmd "(b)" (Command "ls (a) (b)") Nothing True False
       ]
   goodSubst = [("a", "xx"), ("b", "yy")]
   expectedSuccess =
     Builder () "builder"
       [ SetPropertyFromValue "prop" "fooxxbaryybaz"
-      , ShellCmd "yy" (Command "ls xx yy") Nothing True
+      , ShellCmd "yy" (Command "ls xx yy") Nothing True False
       ]
   badSubst = [("c", "xx")]
   expectedErrors = Set.fromList
@@ -110,6 +110,7 @@ testNormalize =
                     , cmd = Command ""
                     , mprop = Nothing
                     , haltOnFailure = Nothing
+                    , ignoreFailure = Nothing
                     }
                 ]
             }
@@ -128,6 +129,7 @@ testNormalize =
                     , cmd = Command ""
                     , mprop = Nothing
                     , haltOnFailure = True
+                    , ignoreFailure = False
                     }
                 ]
             }

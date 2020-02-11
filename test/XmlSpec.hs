@@ -126,6 +126,22 @@ badXml17 =
   \</config>"
 expectedResultForBadXml17 = Failure $ Set.fromList [ NotABoolean aHaltOnFailure "foo" (Just 3) ]
 
+badXml18 =
+  "<config>\n\
+  \  <builder name=\"foo\">\n\
+  \    <shell command=\"ls\" ignoreFailure=\"very bad\"/>\n\
+  \  </builder>\n\
+  \</config>"
+expectedResultForBadXml18 = Failure $ Set.fromList [ NotABoolean aIgnoreFailure "very bad" (Just 3) ]
+
+badXml19 =
+  "<config>\n\
+  \  <builder name=\"foo\">\n\
+  \    <setProperty command=\"ls\" property=\"whatever\" ignoreFailure=\"wrong\"/>\n\
+  \  </builder>\n\
+  \</config>"
+expectedResultForBadXml19 = Failure $ Set.fromList [ NotABoolean aIgnoreFailure "wrong" (Just 3) ]
+
 validXml =
   "<config>\
   \  <substitution>\
@@ -134,7 +150,7 @@ validXml =
   \    <entry name=\"bb\" value=\"22\"/>\
   \  </substitution>\
   \  <builder workdir=\"dir1\" name=\"ls builder\">\
-  \    <shell workdir=\"dir2\" command=\"ls /\" haltOnFailure=\"True\"/>\
+  \    <shell workdir=\"dir2\" command=\"ls /\" haltOnFailure=\"True\" ignoreFailure=\"True\"/>\
   \    <setProperty property=\"prop\" value=\"foobar\"/>\
   \  </builder>\
   \</config>"
@@ -145,7 +161,14 @@ expectedResultForValidXml = Success config
       { workdir = Just "dir1"
       , name = "ls builder"
       , steps =
-        [ ShellCmd { workdir = Just "dir2", cmd = Command "ls /", mprop = Nothing, haltOnFailure=Just True }
+        [ ShellCmd
+          {
+              workdir = Just "dir2"
+            , cmd = Command "ls /"
+            , mprop = Nothing
+            , haltOnFailure=Just True
+            , ignoreFailure=Just True
+          }
         , SetPropertyFromValue { prop = "prop", value = "foobar" }
         ]
       }
@@ -204,6 +227,10 @@ spec =
       parseXmlString badXml16 `shouldBe` expectedResultForBadXml16
     it (printf "should fail on wrong Boolean attribute haltOnFailure in <%s>" tSetProperty) $
       parseXmlString badXml17 `shouldBe` expectedResultForBadXml17
+    it (printf "should fail on wrong Boolean attribute ignoreFailure in <%s>" tShell) $
+      parseXmlString badXml18 `shouldBe` expectedResultForBadXml18
+    it (printf "should fail on wrong Boolean attribute ignoreFailure in <%s>" tSetProperty) $
+      parseXmlString badXml19 `shouldBe` expectedResultForBadXml19
  where
   normalizeTestConfig :: Config Parsed -> ConfigValidation (Config Substituted)
   normalizeTestConfig = substAll [] . normalize ""

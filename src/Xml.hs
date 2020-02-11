@@ -6,6 +6,7 @@
 module Xml (
   aCommand
   , aHaltOnFailure
+  , aIgnoreFailure
   , aProperty
   , aValue
   , failWith
@@ -49,6 +50,7 @@ import Config
 -- Attributes
 aCommand = "command"
 aHaltOnFailure = "haltOnFailure"
+aIgnoreFailure = "ignoreFailure"
 aName = "name"
 aProperty = "property"
 aValue = "value"
@@ -192,7 +194,8 @@ zxmlToShellCmd zxml@ZElem {maybeLine} shellOrSetPropertyFromCmd = do
   validateShellOrSetPropFromCmd shellOrSetPropertyFromCmd mprop maybeLine
   cmd <- parseAttrValue zxml aCommand parseCommand
   haltOnFailure <- parseOptionalBoolAttrValue zxml aHaltOnFailure
-  return (ShellCmd workdir cmd mprop haltOnFailure)
+  ignoreFailure <- parseOptionalBoolAttrValue zxml aIgnoreFailure
+  return $ ShellCmd workdir cmd mprop haltOnFailure ignoreFailure
  where
   parseCommand cmdString
     | all isSpace cmdString = failWith (EmptyCommand maybeLine)
@@ -334,13 +337,14 @@ stepToXml (SetPropertyFromValue prop value) =
     tSetProperty
     (aProperty =: prop <> aValue =: value)
     []
-stepToXml (ShellCmd workdir Command{cmdString} mprop haltOnFailure) =
+stepToXml (ShellCmd workdir Command{cmdString} mprop haltOnFailure ignoreFailure) =
   element
     tag
     (aCommand =: cmdString
       <> aWorkdir =: workdir
       <> aProperty =? mprop
-      <> aHaltOnFailure =: show haltOnFailure)
+      <> aHaltOnFailure =: show haltOnFailure
+      <> aIgnoreFailure =: show ignoreFailure)
     []
  where
   tag | isJust mprop = tSetProperty

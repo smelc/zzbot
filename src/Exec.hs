@@ -142,7 +142,7 @@ runStep
 runStep properties (SetPropertyFromValue prop value) =
   return (properties', StepStreams Nothing Nothing, Common.Success, True)
   where properties' = Map.insert prop value properties
-runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure) = do
+runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure ignoreFailure) = do
   zzLogInfo (cmdString ++ maybe "" (" → " ++) mprop)
   (rc, outmsg, errmsg) <- runShellCommand workdir cmd
   unless (null outmsg) $ putOut outmsg -- show step standard output, if any
@@ -150,8 +150,9 @@ runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure)
   unless (rc == ExitSuccess) $
     zzLogError (cmdString ++ " failed: " ++ show rc)
   let properties' = properties & maybe id (`Map.insert` normalize outmsg) mprop
-  let streams = StepStreams (Just outmsg) (Just errmsg)
-  return (properties', streams, toStatus rc, not haltOnFailure || rc == ExitSuccess)
+      streams = StepStreams (Just outmsg) (Just errmsg)
+      status = if ignoreFailure then Common.Success else toStatus rc
+  return (properties', streams, status, not haltOnFailure || rc == ExitSuccess)
  where
   normalize "" = ""
   normalize str = if last str == '\n' then init str else str
