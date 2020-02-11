@@ -70,6 +70,11 @@ type family StepHaltOnFailureType (p :: Phase) :: Type where
   StepHaltOnFailureType Normalized = Bool
   StepHaltOnFailureType Substituted = Bool
 
+type family StepIgnoreFailureType (p :: Phase) :: Type where
+  StepIgnoreFailureType Parsed = Maybe Bool
+  StepIgnoreFailureType Normalized = Bool
+  StepIgnoreFailureType Substituted = Bool
+
 type family StepWorkDirType (p :: Phase) :: Type where
   StepWorkDirType Parsed = Maybe String
   StepWorkDirType Normalized = String
@@ -83,6 +88,7 @@ type family StepExtensionType (p :: Phase) :: Type where
 type Forall (c :: Type -> Constraint) (p :: Phase) =
   ( c (BuilderWorkDirType p)
   , c (ConfigSubstType p)
+  , c (StepIgnoreFailureType p)
   , c (StepHaltOnFailureType p)
   , c (StepWorkDirType p)
   , c (StepExtensionType p)
@@ -98,8 +104,11 @@ data Step (p :: Phase)
   = SetPropertyFromValue { prop :: String, value :: String }
   | ShellCmd             { workdir :: StepWorkDirType p,
                            cmd :: Command,
-                           mprop :: Maybe String, -- ^ The build property to set (if any) from the command's output
-                           haltOnFailure :: StepHaltOnFailureType p
+                           mprop :: Maybe String, -- ^ The build property to set with the command's output
+                           haltOnFailure :: StepHaltOnFailureType p, -- ^ Whether a failure of this step
+                           -- causes the build to halt
+                           ignoreFailure :: StepIgnoreFailureType p -- ^ Whether a failure of this step
+                           -- will cause the build to be reported as failing too
                          }
   | Ext (StepExtensionType p)
 
@@ -229,18 +238,25 @@ instance Substable Command Command where
   substitute delimiters subst (Command cmd) =
     Command <$> applySubstitution delimiters subst cmd
 
-instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool, StepExtensionType a ~ Void) => Substable (Step a) (Step Substituted) where
+instance (StepWorkDirType a ~ String,
+          StepIgnoreFailureType a ~ Bool,
+          StepHaltOnFailureType a ~ Bool,
+          StepExtensionType a ~ Void) => Substable (Step a) (Step Substituted) where
   substitute delimiters subst (SetPropertyFromValue prop value) =
     SetPropertyFromValue prop <$> applySubstitution delimiters subst value
-  substitute delimiters subst (ShellCmd workdir cmd mprop haltOnFailure) =
+  substitute delimiters subst (ShellCmd workdir cmd mprop haltOnFailure ignoreFailure) =
     ShellCmd
       <$> applySubstitution delimiters subst workdir
       <*> substitute delimiters subst cmd
       <*> Success mprop
       <*> Success haltOnFailure
+      <*> Success ignoreFailure
   substitute _ _ (Ext ext) = absurd ext
 
-instance (StepWorkDirType a ~ String, StepHaltOnFailureType a ~ Bool, StepExtensionType a ~ Void) => Substable (Builder a) (Builder Substituted) where
+instance (StepWorkDirType a ~ String,
+          StepIgnoreFailureType a ~ Bool,
+          StepHaltOnFailureType a ~ Bool,
+          StepExtensionType a ~ Void) => Substable (Builder a) (Builder Substituted) where
   substitute delimiters subst (Builder _ name steps) =
     Builder ()
       <$> applySubstitution delimiters subst name
@@ -298,16 +314,19 @@ normalize userWorkDir Config{builders, subst} =
 
   normalizeStep :: FilePath -> Step Parsed -> [Step Normalized]
   normalizeStep _ SetPropertyFromValue{..} = [SetPropertyFromValue {..}]
-  normalizeStep defaultWorkDir step@ShellCmd{workdir=stepWorkDir, mprop, haltOnFailure} =
+  normalizeStep defaultWorkDir step@ShellCmd{workdir=stepWorkDir, mprop, haltOnFailure, ignoreFailure} =
     [ step
         { workdir = absoluteWorkDir
         , haltOnFailure = fromMaybe defaultHaltOnFailure haltOnFailure
+        , ignoreFailure = fromMaybe defaultIgnoreFailure ignoreFailure
         }
     ]
    where
     relativeWorkDir = fromMaybe "" stepWorkDir
     absoluteWorkDir = prependIfRelative defaultWorkDir relativeWorkDir
-    -- haltOnFailure defaults to True for <shell> and to False for <setPropertyFromCommand>
+    -- haltOnFailure defaults to True for <shell> and to False for <setProperty command="...">
     defaultHaltOnFailure = isNothing mprop
+    -- ignoreFailure defaults to False for <shell> and to True for <setProperty command="...">
+    defaultIgnoreFailure = isJust mprop
   normalizeStep defaultWorkDir (Ext (Foreach steps)) =
     concatMap (normalizeStep defaultWorkDir) steps

@@ -35,14 +35,18 @@ shouldSucceedConfigs =
   [ "configs/config.xml"
   , "configs/tests/db1.xml"
   , "configs/tests/db_nonull.xml"
+  , "configs/tests/haltOnFailure3.xml"
   , "configs/tests/haltOnFailure4.xml"
+  , "configs/tests/ignoreFailure2.xml"
+  , "configs/tests/ignoreFailure3.xml"
   ]
 
 shouldFailConfigs :: [String]
 shouldFailConfigs =
   [ "configs/tests/haltOnFailure1.xml"
   , "configs/tests/haltOnFailure2.xml"
-  , "configs/tests/haltOnFailure3.xml"
+  , "configs/tests/ignoreFailure1.xml"
+  , "configs/tests/ignoreFailure4.xml"
   ]
 
 otherConfigs :: [String]

@@ -30,9 +30,11 @@ Element `<builder>` specifies a list of shell commands to execute. Its attribute
     * The mandatory `command` attribute which specifies the shell command to execute.
     * The optional `workdir` attribute which specifies the working directory where to execute the command. If omitted, it defaults to the working directory of the enclosing builder.
     * The optional Boolean `haltOnFailure` attribute which specifies whether the enclosing builder's execution must stop if the command fails. If omitted, it defaults to `"True"`.
+    * The optional Boolean `ignoreFailure` attribute which specifies whether the enclosing builder's execution must be considered a failure if the command fails. If omitted, it defaults to `"False"` (i.e. a step's failure yields a build failure).
 * `<setProperty>` (without the `value` attribute, otherwise see next bullet) which has the same attributes as `<shell>` with the following changes:
     * The addition of the mandatory `property` attribute. This attribute specifies the name of the build property to which the standard output of the command is assigned to.
     * The default value of `haltOnFailure` is `"False"`. The rationale is that a common idiom is to do something if a file is missing, in which case `<setProperty>` calls command `ls`, which will fail while still being a valid build execution.
+    * The default value of `ignoreFailure` is `"True"`. The rationale for this default is the same as for `haltOnFailure`.
 * `<setProperty>` whose syntax is `<setProperty property="foo" value="bar">` which assigns the value `bar` to the build property `foo`. As the value may contain variables, `<setProperty>` can be used to build variables from constant strings or from the concatenation of constants and other variables.
 
 ## `<substitution>` {#substitution}

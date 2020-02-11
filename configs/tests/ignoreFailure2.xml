@@ -1,0 +1,6 @@
+<!-- build should succeed because ignoreFailure is set to True -->
+<config>
+  <builder name="test builder">
+    <shell command="ls /doesnt_exist" ignoreFailure="True"/>
+  </builder>
+</config>
