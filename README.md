@@ -4,7 +4,7 @@
 
 zzbot is a tool to execute shell commands in a flexible manner and keep track of the history of past executions.
 
-[zzbot example output](https://i.imgur.com/QNkRVQa.png)
+![zzbot example output](https://i.imgur.com/QNkRVQa.png)
 
 Documentation: [index.md](https://github.com/smelc/zzbot/blob/master/doc/src/index.md)
 
