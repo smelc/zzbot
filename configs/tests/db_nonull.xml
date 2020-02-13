@@ -3,6 +3,7 @@
     <entry name="zzbot" value="stack exec zzbot --">
   </substitution>
   <builder name="name">
+    <shell command="which sqlite3"/>
     <setProperty command="mktemp -u" property="tmpdb"/>
     <shell command="$[zzbot] configs/tests/simplest.xml --database «tmpdb»"/>
     <!-- This config would benefit from <foreach> -->
