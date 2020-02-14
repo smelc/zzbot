@@ -19,6 +19,7 @@ import Common
 import Db
 import LowLevelDb
 import Exec
+import Web
 import Xml
 
 import qualified Data.List.NonEmpty as NE
@@ -26,23 +27,31 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Options.Applicative as Opt
 
-{- HLINT ignore Options -}
+data WebMode = WebYes | WebNo
+
 data Options = Options
-  { optFilenames :: NonEmpty String
+  { optFilenames :: [String]
   , optProcessMode :: ProcessMode
+  , optWeb :: WebMode
   , optDatabasePath :: FilePath
   }
 
 optionsParser :: Opt.Parser Options
 optionsParser =
   Options
-    <$> NE.some1 (Opt.strArgument (Opt.metavar "FILE"))
+    <$> some (Opt.strArgument (Opt.metavar "FILE"))
     <*> Opt.flag
           Execute
           PrintOnly
           (Opt.long "print"
              <> Opt.short 'p'
              <> Opt.help "print the builder's interpretation, but do not execute it")
+    <*> Opt.flag
+          WebNo
+          WebYes
+          (Opt.long "web"
+             <> Opt.short 'w'
+             <> Opt.help "runs a web server to crawl builds' data")
     <*> Opt.strOption
           (Opt.long "database"
             <> Opt.help "The sqlite database to use"
@@ -59,16 +68,29 @@ runConcreteStack
   -> IO a
 runConcreteStack = flip runReaderT
 
+launchWeb :: WebMode -> Database -> IO()
+launchWeb mode db = 
+  case mode of
+    WebNo -> return ()
+    WebYes -> web 8010 db
+
 main :: IO ()
 main = do
-  Options{optFilenames, optProcessMode, optDatabasePath} <-
+  Options{optFilenames, optProcessMode, optWeb, optDatabasePath} <-
     Opt.execParser optionsParserInfo
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
   withDatabase optDatabasePath $ \db -> do
-    statuses <- runConcreteStack db $ traverse
+    -- FIXME smelc: parallelize launchWeb and runConcreteStack
+    -- (we want the web server to start simultaneously with processing the build file (if any))
+    -- if web is requested and no build: join on webserver, return webserver status (is there one?)
+    -- if web is not requested and builds are: join on builds; return exit code corresponding to build status
+    -- if both are requested: join on both, quit when both have finished; return webserver status (rationale: if you wanted
+    -- the build' status, you should not launch the webserver)
+    launchWeb optWeb db
+    statuses :: [Status] <- runConcreteStack db $ traverse
       (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) optProcessMode env) xmls
-    exitWith $ toExitCode $ maximum1 statuses
+    exitWith $ toExitCode $ foldr max Common.Success statuses
 
 -- This function makes sense solely here, that's why it's not in Common.hs
 toExitCode :: Status -> ExitCode
