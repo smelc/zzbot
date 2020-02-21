@@ -68,6 +68,15 @@ runConcreteStack
   -> IO a
 runConcreteStack = flip runReaderT
 
+launchBuild :: Database
+            -> ProcessMode
+            -> ProcessEnv
+            -> [String]
+            -> IO [Status]
+launchBuild db processMode processEnv xmls =
+  runConcreteStack db $ traverse
+    (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) processMode processEnv) xmls
+
 launchWeb :: WebMode -> Database -> IO()
 launchWeb mode db = 
   case mode of
@@ -88,8 +97,7 @@ main = do
     -- if both are requested: join on both, quit when both have finished; return webserver status (rationale: if you wanted
     -- the build' status, you should not launch the webserver)
     launchWeb optWeb db
-    statuses :: [Status] <- runConcreteStack db $ traverse
-      (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) optProcessMode env) xmls
+    statuses :: [Status] <- launchBuild db optProcessMode env xmls
     exitWith $ toExitCode $ foldr max Common.Success statuses
 
 -- This function makes sense solely here, that's why it's not in Common.hs
