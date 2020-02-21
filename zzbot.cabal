@@ -50,7 +50,8 @@ executable zzbot
   hs-source-dirs:    app
   ghc-options:       -Wincomplete-patterns -Werror
   default-language:  Haskell2010
-  build-depends:     base >=4.7 && <5,
+  build-depends:     async,
+                     base >=4.7 && <5,
                      containers,
                      directory,
                      extra,

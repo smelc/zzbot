@@ -6,6 +6,7 @@ module Main where
 
 import Config
 import Control.Applicative
+import Control.Concurrent.Async
 import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty.Extra (maximum1)
@@ -32,7 +33,7 @@ data WebMode = WebYes | WebNo
 data Options = Options
   { optFilenames :: [String]
   , optProcessMode :: ProcessMode
-  , optWeb :: WebMode
+  , optWebMode :: WebMode
   , optDatabasePath :: FilePath
   }
 
@@ -77,28 +78,35 @@ launchBuild db processMode processEnv xmls =
   runConcreteStack db $ traverse
     (process @UsingIOForExec @(UsingLowLevelDb UsingIOForDb) processMode processEnv) xmls
 
-launchWeb :: WebMode -> Database -> IO()
-launchWeb mode db = 
+launchWeb :: Database
+          -> WebMode
+          -> IO()
+launchWeb db mode = 
   case mode of
     WebNo -> return ()
     WebYes -> web 8010 db
 
+launchAll :: Database
+          -> ProcessMode
+          -> WebMode
+          -> ProcessEnv
+          -> [String]
+          -> IO Status
+launchAll db processMode webMode processEnv xmls = do
+  (_, statuses :: [Status]) <- concurrently
+                                 (launchWeb db webMode)
+                                 (launchBuild db processMode processEnv xmls)
+  return $ foldr max Common.Success statuses
+
 main :: IO ()
 main = do
-  Options{optFilenames, optProcessMode, optWeb, optDatabasePath} <-
+  Options{optFilenames, optProcessMode, optWebMode, optDatabasePath} <-
     Opt.execParser optionsParserInfo
   env <- ProcessEnv <$> getCurrentDirectory <*> getEnvironment
   xmls <- traverse readFile optFilenames
   withDatabase optDatabasePath $ \db -> do
-    -- FIXME smelc: parallelize launchWeb and runConcreteStack
-    -- (we want the web server to start simultaneously with processing the build file (if any))
-    -- if web is requested and no build: join on webserver, return webserver status (is there one?)
-    -- if web is not requested and builds are: join on builds; return exit code corresponding to build status
-    -- if both are requested: join on both, quit when both have finished; return webserver status (rationale: if you wanted
-    -- the build' status, you should not launch the webserver)
-    launchWeb optWeb db
-    statuses :: [Status] <- launchBuild db optProcessMode env xmls
-    exitWith $ toExitCode $ foldr max Common.Success statuses
+    status <- launchAll db optProcessMode optWebMode env xmls
+    exitWith $ toExitCode status
 
 -- This function makes sense solely here, that's why it's not in Common.hs
 toExitCode :: Status -> ExitCode
