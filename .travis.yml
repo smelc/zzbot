@@ -22,6 +22,7 @@ addons:
   apt:
     packages:
       - libgmp-dev
+      - shellcheck
       - sqlite3
 
 before_install:
@@ -42,3 +43,5 @@ script:
 - curl -sSL https://raw.github.com/ndmitchell/neil/master/misc/travis.sh | sh -s -- hlint .
 # Generate documentation from sources
 - stack exec haddock -- --html $(find src -name \*.hs) -o html
+# Check scripts in docker
+- shellcheck -S error docker/run-docker-run.sh
