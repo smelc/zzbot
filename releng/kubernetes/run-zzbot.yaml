@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zzbot
+  labels:
+    deploy: zzbot # So that the deployment can be selected with "-l deploy=zzbot"
+spec:
+  selector:
+    matchLabels:
+      run: zzbot # How does the deployment find the pods to which it applies
+  # replicas: 2
+  template:
+    metadata:
+      labels:
+        run: zzbot # Created pods gets this label
+    spec:
+      containers:
+      - name: zzbot
+        image: zzbot:1.0
+        ports:
+        - containerPort: 8010
