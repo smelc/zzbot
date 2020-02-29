@@ -34,6 +34,9 @@ import qualified Data.Text as Text
 
 -- | The database's structure is documented at the repo's root DEV.md file
 class Monad m => LowLevelDbOperations s m where
+    -- Read operations done by UI
+    getAllBuilders :: m [String] -- ^ Get the names of all builders
+    -- Write operations done by builders
     startBuild :: String -> m BuildID -- ^ Records start of build with given name, returns the new build's unique identifier
     startStep :: BuildID -> LBS.ByteString -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
     endStep :: StepID -> StepStreams -> Status -> m () -- ^ Records the end of a step, requires its identifier, streams outputs, and its status
@@ -90,7 +93,19 @@ withWriteConnection action = do
   Database lock conn <- ask
   liftIO (RWL.withWrite lock (action conn))
 
+{-# ANN BuildRow ("HLint: ignore" :: String) #-}
+data BuildRow = BuildRow String deriving (Show)
+
+instance FromRow BuildRow where
+  fromRow = BuildRow <$> field
+
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations UsingIOForDb m where
+    getAllBuilders =
+      withReadConnection $ \conn -> do
+        result :: [BuildRow] <- query_ conn "SELECT DISTINCT builder FROM build"
+        return $ map selector result
+        where selector (BuildRow s) = s
+
     startBuild builderName =
       withWriteConnection $ \conn -> do
         executeNamed conn query args
