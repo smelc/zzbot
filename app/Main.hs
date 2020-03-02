@@ -84,7 +84,7 @@ launchWeb :: Database
 launchWeb db mode = 
   case mode of
     WebNo -> return ()
-    WebYes -> web 8010 db
+    WebYes -> web db 8010
 
 launchAll :: Database
           -> ProcessMode

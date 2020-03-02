@@ -18,6 +18,7 @@ import Config
 import LowLevelDb
 
 class Monad m => DbOperations s m where
+   getAllBuilders :: m [String] -- ^ Get the names of all builders
    startBuild
      :: String -- ^ The builder's name
      -> m BuildID
@@ -26,6 +27,7 @@ class Monad m => DbOperations s m where
    endBuild :: BuildID -> Status -> m ()
 
 instance forall a s m . DbOperations s m => DbOperations s (ExceptT a m) where
+   getAllBuilders = lift (Db.getAllBuilders @s)
    startBuild name = lift (Db.startBuild @s name)
    startStep state desc = lift (Db.startStep @s state desc)
    endStep state stepID streams status =
@@ -35,6 +37,7 @@ instance forall a s m . DbOperations s m => DbOperations s (ExceptT a m) where
 data UsingLowLevelDb s
 
 instance (Monad m, LowLevelDbOperations s m) => DbOperations (UsingLowLevelDb s) m where
+    getAllBuilders = LowLevelDb.getAllBuilders @s
     startBuild = LowLevelDb.startBuild @s
     startStep buildID step = LowLevelDb.startStep @s buildID (J.encode step)
     endStep _ = LowLevelDb.endStep @s
