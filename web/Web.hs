@@ -25,8 +25,7 @@ runWeb db port = scottyT port (`runReaderT` db) (web @(UsingLowLevelDb UsingIOFo
 
 web
   :: forall s m
-   . DbOperations s m
-  => MonadIO m
+   . (MonadIO m, DbOperations s m)
   => ScottyT Text m ()
 web =
   get "/" $ do
