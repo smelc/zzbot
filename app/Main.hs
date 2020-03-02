@@ -81,10 +81,10 @@ launchBuild db processMode processEnv xmls =
 launchWeb :: Database
           -> WebMode
           -> IO()
-launchWeb db mode = 
+launchWeb db mode =
   case mode of
     WebNo -> return ()
-    WebYes -> web db 8010
+    WebYes -> runWeb db 8010
 
 launchAll :: Database
           -> ProcessMode
