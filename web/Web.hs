@@ -36,4 +36,6 @@ web =
     html $ renderHtml $ do
       H.h1 "zzbot"
       H.p "Here's the list of builders"
-      H.ul $ forM_ builders (H.li . H.toHtml)
+      if Prelude.null builders
+        then H.p "oops, no builders!"
+        else H.ul $ forM_ builders (H.li . H.toHtml)
