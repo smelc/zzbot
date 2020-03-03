@@ -5,16 +5,19 @@
 
 module Web where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Trans
 import Data.Text.Lazy
+import Text.Blaze.Html.Renderer.Text (renderHtml)
 import Web.Scotty.Trans
 
 import qualified Data.Text.Lazy as Text
+import qualified Text.Blaze.Html5 as H
+import qualified Text.Blaze.Html5.Attributes as A
 
 import Db
-import Html
 import LowLevelDb
 
 runWeb
@@ -30,10 +33,7 @@ web
 web =
   get "/" $ do
     builders :: [String] <- lift $ Db.getAllBuilders @s
-    let builders' :: [Text] = Prelude.map pack builders
-    html $ append start $ buildersText builders'
-  where start = Text.concat ["<h1>zzbot</h1>", "\n", "Here's the list of builders:"]
-        buildersText builders' =
-          if Prelude.null builders'
-          then "oops, no builders!"
-          else listify builders'
+    html $ renderHtml $ do
+      H.h1 "zzbot"
+      H.p "Here's the list of builders"
+      H.ul $ forM_ builders (H.li . H.toHtml)
