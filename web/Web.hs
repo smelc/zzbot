@@ -30,12 +30,22 @@ web
   :: forall s m
    . (MonadIO m, DbOperations s m)
   => ScottyT Text m ()
-web =
+web = do
   get "/" $ do
     builders :: [String] <- lift $ Db.getAllBuilders @s
     html $ renderHtml $ do
       H.h1 "zzbot"
-      H.p "Here's the list of builders"
+      H.p "Here's the list of builders:"
       if Prelude.null builders
         then H.p "oops, no builders!"
         else H.ul $ forM_ builders (H.li . H.toHtml)
+  get "/builder/:builder" $ do
+    builder :: Text <- param "builder"
+    builders :: [String] <- lift $ Db.getAllBuilders @s -- XXX Use a query method, to avoid retrieving all builders
+    let builder' :: H.Html = H.i $ H.toHtml builder
+    html $ renderHtml $
+      if builder `notElem` Prelude.map pack builders
+      then H.p (H.toHtml ("Builder " :: Text)
+                <> builder'
+                <> H.toHtml (" doesn't exist" :: Text))
+      else undefined
