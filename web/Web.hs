@@ -42,10 +42,11 @@ web = do
   get "/builder/:builder" $ do
     builder :: Text <- param "builder"
     builders :: [String] <- lift $ Db.getAllBuilders @s -- XXX Use a query method, to avoid retrieving all builders
-    let builder' :: H.Html = H.i $ H.toHtml builder
     html $ renderHtml $
-      if builder `notElem` Prelude.map pack builders
-      then H.p (H.toHtml ("Builder " :: Text)
-                <> builder'
-                <> H.toHtml (" doesn't exist" :: Text))
-      else undefined
+      if unpack builder `notElem` builders
+        then H.p $ do
+          "Builder "
+          H.i $ H.toHtml builder
+          " doesn't exist."
+        else
+          undefined
