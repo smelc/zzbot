@@ -9,4 +9,4 @@ if [[ `readlink hlint` != "$hlint" ]]; then
   ln -s $hlint hlint
 fi
 echo "Using $hlint"
-export PATH="$PATH:`pwd`"
+export PATH="`pwd`:$PATH"
