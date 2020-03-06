@@ -8,6 +8,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 module LowLevelDb (
+  BuildRow,
   Database(),
   LowLevelDbOperations(..),
   UsingIOForDb(),
@@ -19,6 +20,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Database.SQLite.Simple
 import Data.Maybe
+import Data.Time.Clock
 
 import Common
 import Text.Printf
@@ -36,6 +38,7 @@ import qualified Data.Text as Text
 class Monad m => LowLevelDbOperations s m where
     -- Read operations done by UI
     getAllBuilders :: m [String] -- ^ Get the names of all builders
+    getAllBuilds :: String -> m [BuildRow] -- ^ Get all builds of a builder
     -- Write operations done by builders
     startBuild :: String -> m BuildID -- ^ Records start of build with given name, returns the new build's unique identifier
     startStep :: BuildID -> LBS.ByteString -> m StepID -- ^ Records the start of a step, requires its description, returns its unique identifier
@@ -93,18 +96,33 @@ withWriteConnection action = do
   Database lock conn <- ask
   liftIO (RWL.withWrite lock (action conn))
 
-{-# ANN BuildRow ("HLint: ignore" :: String) #-}
-data BuildRow = BuildRow String deriving (Show)
+{-# ANN BuildBuilderRow ("HLint: ignore" :: String) #-}
+data BuildBuilderRow = BuildBuilderRow String deriving (Show)
+
+instance FromRow BuildBuilderRow where
+  fromRow = BuildBuilderRow <$> field
+
+data BuildRow = BuildRow Int String UTCTime UTCTime deriving (Show)
 
 instance FromRow BuildRow where
-  fromRow = BuildRow <$> field
+  fromRow = BuildRow <$> field <*> field <*> field <*> field
 
 instance (MonadReader Database m, MonadIO m) => LowLevelDbOperations UsingIOForDb m where
     getAllBuilders =
       withReadConnection $ \conn -> do
-        result :: [BuildRow] <- query_ conn "SELECT DISTINCT builder FROM build"
+        result :: [BuildBuilderRow] <- query_ conn "SELECT DISTINCT builder FROM build"
         return $ map selector result
-        where selector (BuildRow s) = s
+        where selector (BuildBuilderRow s) = s
+
+    getAllBuilds builderName =
+      withReadConnection $ \conn -> do
+        result :: [BuildRow] <- queryNamed conn query args
+        return result
+        where
+          query = "SELECT\
+                  \  (id, start, end, status) FROM build\
+                  \  WHERE builder = :builder"
+          args = [ ":builder" := builderName ]
 
     startBuild builderName =
       withWriteConnection $ \conn -> do

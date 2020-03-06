@@ -43,6 +43,7 @@ library
                      scotty,
                      sqlite-simple,
                      text,
+                     time,
                      validation,
                      xml
 
