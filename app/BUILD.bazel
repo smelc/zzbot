@@ -1,0 +1,25 @@
+load(
+    "@rules_haskell//haskell:defs.bzl",
+    "haskell_binary",
+    "haskell_toolchain_library"
+)
+
+haskell_toolchain_library(name = "base")
+
+haskell_binary(
+    name = "zzbot",
+    srcs = ["Main.hs"],
+    compiler_flags = ["-threaded"],
+    deps = [
+        "//src:lib",
+        "//web:web",
+        "@stackage//:async",
+        "@stackage//:base",
+        "@stackage//:containers",
+        "@stackage//:directory",
+        "@stackage//:extra",
+        "@stackage//:mtl",
+        "@stackage//:optparse-applicative",
+        "@stackage//:validation",
+    ],
+)

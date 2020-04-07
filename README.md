@@ -31,3 +31,9 @@ Test and documentation commmands:
 
 * `stack test` executes tests in `test/TestConfig.hs`
 * `stack exec haddock -- --html $(find src -name \*.hs) -o html` generates the documentation of sources in `src/`
+
+# Bazel
+
+zzbot can be built using Tweag's
+[rules_haskell](https://github.com/tweag/rules_haskell) extension
+of [Bazel](https://bazel.build): `bazel build //...`

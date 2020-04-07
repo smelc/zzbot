@@ -66,6 +66,6 @@ run stack build || exit $?
 run stack test || exit $?
 # Check that hints are applied
 install_hlint
-run ./$HLINT . || exit $?
+run ./$HLINT $(git ls-files "*.hs") || exit $?
 # Generate documentation from sources
 run stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?

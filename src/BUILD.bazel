@@ -1,0 +1,32 @@
+load(
+    "@rules_haskell//haskell:defs.bzl",
+    "haskell_library"
+)
+
+haskell_library(
+    name = "lib",
+    srcs = glob(["*.hs"]),
+    visibility = ["//app:__pkg__", "//web:__pkg__"],
+    deps = [
+                "@stackage//:aeson",
+                "@stackage//:base",
+                "@stackage//:blaze-html",
+                "@stackage//:bytestring",
+                "@stackage//:concurrent-extra",
+                "@stackage//:containers",
+                "@stackage//:either",
+                "@stackage//:extra",
+                "@stackage//:filepath",
+                "@stackage//:megaparsec",
+                "@stackage//:mtl",
+                "@stackage//:prettyprinter",
+                "@stackage//:prettyprinter-ansi-terminal",
+                "@stackage//:process",
+                "@stackage//:safe",
+                "@stackage//:sqlite-simple",
+                "@stackage//:text",
+                "@stackage//:time",
+                "@stackage//:validation",
+                "@stackage//:xml"
+    ],
+)
