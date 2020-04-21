@@ -69,3 +69,10 @@ install_hlint
 run ./$HLINT $(git ls-files "*.hs") || exit $?
 # Generate documentation from sources
 run stack exec haddock -- --html $(find src -name \*.hs) -o html || exit $?
+
+if [[ $(hostname) == "karak-azul" ]]; then
+  # smelc personal stuff
+  for location in $HOME/PERSONNEL/kcg /media/crypt1/nomadic/tezos /media/crypt1/nomadic/bizos; do
+    run stack install zzbot --local-bin-path "$location" || exit $?
+  done
+fi

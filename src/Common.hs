@@ -18,6 +18,10 @@ toStatus :: ExitCode -> Status
 toStatus ExitSuccess = Success
 toStatus _ = Failure
 
+exitCodetoInt :: ExitCode -> Int
+exitCodetoInt ExitSuccess = 0
+exitCodetoInt (ExitFailure i) = i
+
 -- This type could be in LowLevelDb, but it would require clients of Db to import LowLevelDb
 -- which I would rather not to (solely Db should depend on LowLevelDb)
 data StepStreams = StepStreams

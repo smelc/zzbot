@@ -134,7 +134,7 @@ runStep properties (ShellCmd workdir cmd@Command{cmdString} mprop haltOnFailure 
   unless (null outmsg) $ putOut @s outmsg -- show step standard output, if any
   unless (null errmsg) $ putErr @s errmsg -- show step error output, if any
   unless (rc == ExitSuccess) $
-    zzLogError @s (cmdString ++ " failed: " ++ show rc)
+    zzLogError @s (cmdString ++ " failed: " ++ show (Common.exitCodetoInt rc))
   let properties' = properties & maybe id (`Map.insert` normalize outmsg) mprop
       streams = StepStreams (Just outmsg) (Just errmsg)
       status = if ignoreFailure then Common.Success else toStatus rc
