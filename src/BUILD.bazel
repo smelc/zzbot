@@ -6,7 +6,7 @@ load(
 haskell_library(
     name = "lib",
     srcs = glob(["*.hs"]),
-    visibility = ["//app:__pkg__", "//web:__pkg__"],
+    visibility = ["//app:__pkg__", "//test:__pkg__", "//web:__pkg__"],
     deps = [
                 "@stackage//:aeson",
                 "@stackage//:base",

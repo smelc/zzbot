@@ -27,6 +27,9 @@ load(
     "rules_haskell_toolchains",
 )
 
+# Download a GHC binary distribution from haskell.org and register it as a toolchain.
+rules_haskell_toolchains(version = "8.6.5")
+
 load(
     "@rules_haskell//haskell:cabal.bzl",
     "stack_snapshot"
@@ -46,15 +49,20 @@ stack_snapshot(
         "either",
         "extra",
         "filepath",
+        "generic-random",
+        "hspec",
+        "lens",
         "megaparsec",
         "mtl",
         "optparse-applicative",
         "prettyprinter",
         "prettyprinter-ansi-terminal",
         "process",
+        "QuickCheck",
         "safe",
         "scotty",
         "sqlite-simple",
+        "temporary",
         "text",
         "time",
         "validation",
@@ -62,6 +70,3 @@ stack_snapshot(
     ],
     snapshot = "lts-14.11"
 )
-
-# Download a GHC binary distribution from haskell.org and register it as a toolchain.
-rules_haskell_toolchains(version = "8.6.5")

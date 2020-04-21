@@ -1,0 +1,27 @@
+load(
+    "@rules_haskell//haskell:defs.bzl",
+    "haskell_test",
+)
+
+haskell_test(
+    name = "test",
+    srcs = glob(["*.hs"]),
+    #main_function = "Spec.main",
+    # tools = ["@hspec-discover"],
+    # compiler_flags = ["-XCPP", "-DHSPEC_DISCOVER=$(location @hspec-discover)"],
+    deps = [
+        "//src:lib",
+        "@stackage//:base",
+        "@stackage//:containers",
+        "@stackage//:generic-random",
+        "@stackage//:hspec",
+        "@stackage//:lens",
+        "@stackage//:mtl",
+        "@stackage//:prettyprinter-ansi-terminal",
+        "@stackage//:process",
+        "@stackage//:QuickCheck",
+        "@stackage//:temporary",
+        "@stackage//:validation",
+    ],
+)
+

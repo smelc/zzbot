@@ -190,10 +190,10 @@ spec =
         , StdOut "bar baz"
         , Message InfoLevel "some junk 1"
         , StdErr "command not found"
-        , Message ErrorLevel "some junk 1 failed: ExitFailure 127"
+        , Message ErrorLevel "some junk 1 failed: 127"
         , Message InfoLevel "some junk 2"
         , StdErr "command not found"
-        , Message ErrorLevel "some junk 2 failed: ExitFailure 127"
+        , Message ErrorLevel "some junk 2 failed: 127"
         ]
       )
     expectedTrace =
