@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+bazel build //app:hie-bios --output_groups=hie_bios
+cat bazel-bin/app/hie-bios@hie-bios >"$HIE_BIOS_OUTPUT"

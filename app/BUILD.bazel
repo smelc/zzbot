@@ -1,7 +1,8 @@
 load(
     "@rules_haskell//haskell:defs.bzl",
     "haskell_binary",
-    "haskell_toolchain_library"
+    "haskell_toolchain_library",
+    "haskell_repl",
 )
 
 haskell_toolchain_library(name = "base")
@@ -22,4 +23,14 @@ haskell_binary(
         "@stackage//:optparse-applicative",
         "@stackage//:validation",
     ],
+)
+
+haskell_repl(
+  name = "hie-bios",
+  collect_data = False,
+  deps = [
+    ":zzbot",
+    # ":library-a",
+    # ":library-b",
+  ],
 )

@@ -8,7 +8,7 @@ import System.Exit
 import System.IO
 import System.IO.Temp
 import System.Process
-import Paths_zzbot
+-- import Paths_zzbot
 
 type Args = [String]
 
@@ -52,6 +52,8 @@ shouldFailConfigs =
 otherConfigs :: [String]
 otherConfigs =
   [ "configs/examples/kcg.xml" ]
+
+getDataFileName = undefined
 
 spec = do
   describe "zzbot" $ do
