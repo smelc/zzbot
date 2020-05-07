@@ -32,6 +32,14 @@ Test and documentation commmands:
 * `stack test` executes tests in `test/TestConfig.hs`
 * `stack exec haddock -- --html $(find src -name \*.hs) -o html` generates the documentation of sources in `src/`
 
+There's a commit pre-hook to execute CI before pushing, install it as follows:
+
+```bash
+cd .git/hooks
+ln -s ../../hooks/pre-commit .
+cd -
+```
+
 # Bazel
 
 zzbot can be built using Tweag's
